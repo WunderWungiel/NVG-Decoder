@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `nvg2svg.py` decodes Nokia NVG files (the Symbian^3 binary vector format) back to SVG. It is a single Python 3 script that uses only the standard library and must stay cross-platform. There is no build, lint config or test suite.
 
+`web/` is the browser version: a static page, published to GitHub Pages by `.github/workflows/pages.yml`.
+- `web/nvg2svg.js` is a function-by-function port of `nvg2svg.py`. It must produce byte-identical SVG, warnings and error messages, so **every decoder change goes into both files**, including `VERSION`/`__version__`.
+- `web/check.js` verifies this. It runs both decoders on the same bytes, decoding with Python in one subprocess, and `--fuzz N` adds N randomly corrupted copies of the inputs. The Pages workflow runs it before deploying.
+- `fmt()` in JS reimplements Python's `"%.4f"`. Python rounds exact ties half-to-even and `toFixed` does not, and s32/65536 coordinates often hit such ties.
+- `web/index.html` loads the decoder as a classic script, not a module, so it also works from `file://`. It has no dependencies and writes zips itself (stored, no compression).
+
 - `SVG2Binary 1.1/` is the reference encoder, a Windows GUI around `libs/svgtbinencode.exe` from the Symbian^3 SDK. `-v 5` produces NVG. The NVG format was reverse-engineered from this binary.
 - `examples/*.nvg` are real encoder output and serve as the regression corpus.
 
@@ -14,6 +20,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 python3 nvg2svg.py examples -d /tmp/out -v      # decode all examples; -v dumps header/offsets/commands to stderr
 python3 nvg2svg.py examples/Python.nvg -o -     # single file to stdout
+node web/check.js examples --fuzz 5000           # JS port must match the Python decoder exactly
+xdg-open web/index.html                          # browser version, no server needed
 rsvg-convert -w 384 /tmp/out/Python.svg -o /tmp/py.png   # render to check visually
 ```
 

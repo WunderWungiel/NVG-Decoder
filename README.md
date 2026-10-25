@@ -4,7 +4,13 @@
 
 It is a single Python 3 script. It needs only the standard library and runs on Windows, macOS and Linux.
 
-## Usage
+## In the browser
+
+**https://wunderwungiel.github.io/NVG-Decoder/** converts files without installing anything. Drop in `.nvg` files or whole folders, preview the results, and download each SVG or all of them as a zip. Decoding runs locally in the browser, so files are never uploaded.
+
+The page is `web/index.html` and also works when opened straight from disk.
+
+## Command line
 
 ```
 python3 nvg2svg.py icon.nvg                # writes icon.svg next to the input
@@ -29,3 +35,5 @@ Files that are actually SVGB (the older Symbian binary format) are rejected. The
 The format was reverse-engineered from `svgtbinencode.exe` (run with `-v 5`), the encoder in the Symbian^3 SDK. The module docstring at the top of `nvg2svg.py` documents the file layout, the command opcodes and the encoder's quirks.
 
 Some features were verified against real encoder output: paths, fills, linear gradients, arcs and full-matrix transforms. Others are inferred only from the decompiled encoder: strokes, radial gradients, and translate-only or scale-only transforms. If one of these decodes incorrectly, please open an issue and attach the file.
+
+`web/nvg2svg.js` is a JavaScript port of the decoder for the browser version. `node web/check.js examples --fuzz 5000` checks that it produces exactly the same SVG and warnings as `nvg2svg.py`, on the examples and on randomly corrupted copies of them. The Pages workflow runs this check before every deploy.

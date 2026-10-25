@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NVG Decoder</title>
+<meta name="description" content="Convert Nokia NVG (Symbian^3) vector graphics to SVG in your browser. Files never leave your computer.">
+<style>
+  :root {
+    --bg: #f6f6f4;
+    --surface: #ffffff;
+    --text: #1d1d1b;
+    --muted: #6b6b66;
+    --border: #dcdcd6;
+    --accent: #1a5fb4;
+    --accent-text: #ffffff;
+    --ok: #26734d;
+    --warn: #9a6700;
+    --err: #b42318;
+    --drop: #e8eef8;
+    --check-a: #ffffff;
+    --check-b: #e4e4e0;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161615;
+      --surface: #20201f;
+      --text: #ecece8;
+      --muted: #a2a29b;
+      --border: #383836;
+      --accent: #78a9f0;
+      --accent-text: #0e1a2b;
+      --ok: #6cc596;
+      --warn: #e0b04a;
+      --err: #f07f74;
+      --drop: #1d2633;
+      --check-a: #2a2a29;
+      --check-b: #333331;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161615;
+    --surface: #20201f;
+    --text: #ecece8;
+    --muted: #a2a29b;
+    --border: #383836;
+    --accent: #78a9f0;
+    --accent-text: #0e1a2b;
+    --ok: #6cc596;
+    --warn: #e0b04a;
+    --err: #f07f74;
+    --drop: #1d2633;
+    --check-a: #2a2a29;
+    --check-b: #333331;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .lede { color: var(--muted); margin: 0 0 24px; }
+  a { color: var(--accent); }
+  code { font: 0.92em ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  #drop {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    padding: 36px 16px;
+    text-align: center;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  #drop.over { background: var(--drop); border-color: var(--accent); }
+  #drop p { margin: 0 0 14px; }
+  #drop .hint { color: var(--muted); font-size: 13px; margin: 14px 0 0; }
+
+  button, .btn {
+    font: inherit;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  #toolbar {
+    display: none;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
+    margin: 24px 0 16px;
+  }
+  #toolbar.show { display: flex; }
+  #summary { flex: 1 1 auto; color: var(--muted); }
+  #summary b { color: var(--text); font-weight: 600; }
+  .bg-pick { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); font-size: 13px; }
+  .bg-pick button { padding: 4px 8px; font-size: 13px; }
+  .bg-pick button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+  #results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+    gap: 14px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .preview {
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .preview img { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; }
+  .preview .failed { color: var(--err); font-size: 13px; text-align: center; padding: 8px; }
+  body[data-bg="checker"] .preview {
+    background-color: var(--check-a);
+    background-image:
+      linear-gradient(45deg, var(--check-b) 25%, transparent 25%, transparent 75%, var(--check-b) 75%),
+      linear-gradient(45deg, var(--check-b) 25%, transparent 25%, transparent 75%, var(--check-b) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+  }
+  body[data-bg="white"] .preview { background: #ffffff; }
+  body[data-bg="black"] .preview { background: #000000; }
+
+  .meta { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .name { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+  .status { font-size: 13px; color: var(--muted); }
+  .status.ok::before, .status.warn::before, .status.err::before { content: "● "; }
+  .status.ok::before { color: var(--ok); }
+  .status.warn { color: var(--warn); }
+  .status.err { color: var(--err); }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 4px; }
+  .actions button { padding: 4px 10px; font-size: 13px; }
+  details { font-size: 13px; }
+  details summary { cursor: pointer; color: var(--muted); }
+  details pre {
+    margin: 6px 0 0;
+    max-height: 220px;
+    overflow: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+  footer p { margin: 4px 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body data-bg="checker">
+<main>
+  <h1>NVG Decoder</h1>
+  <p class="lede">Convert Nokia NVG icons and theme graphics (Symbian^3) back to SVG. Decoding runs in your browser, so your files are never uploaded.</p>
+
+  <section id="drop" aria-label="Add files">
+    <p>Drop <code>.nvg</code> files or folders here</p>
+    <button class="primary" id="pick-files" type="button">Choose files</button>
+    <button id="pick-folder" type="button">Choose folder</button>
+    <p class="hint">The SDK encoder names NVG output <code>.svgb</code>, so <code>.svgb</code> files are accepted too.</p>
+    <input id="file-input" class="sr-only" type="file" multiple accept=".nvg,.svgb" tabindex="-1">
+    <input id="folder-input" class="sr-only" type="file" webkitdirectory multiple tabindex="-1">
+  </section>
+
+  <div id="toolbar">
+    <div id="summary" aria-live="polite"></div>
+    <span class="bg-pick" role="group" aria-label="Preview background">Background
+      <button type="button" data-bg="checker" aria-pressed="true">Grid</button>
+      <button type="button" data-bg="white" aria-pressed="false">White</button>
+      <button type="button" data-bg="black" aria-pressed="false">Black</button>
+    </span>
+    <button class="primary" id="zip" type="button">Download all (.zip)</button>
+    <button id="clear" type="button">Clear</button>
+  </div>
+
+  <section id="results" aria-label="Results"></section>
+
+  <footer>
+    <p>nvg2svg <span id="version"></span> · <a href="https://github.com/WunderWungiel/NVG-Decoder">Source and command-line version on GitHub</a></p>
+    <p>Paths, fills, linear gradients, arcs and transforms are verified against real encoder output. Strokes and radial gradients are inferred from the decompiled encoder. If a file decodes incorrectly, please open an issue and attach it.</p>
+  </footer>
+</main>
+
+<script src="nvg2svg.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var NVG = window.NVG2SVG;
+  var results = [];  // {path, svg, warnings, error, log, url}
+
+  var $ = function (id) { return document.getElementById(id); };
+  var drop = $("drop"), fileInput = $("file-input"), folderInput = $("folder-input");
+  $("version").textContent = NVG.VERSION;
+
+  function isNvgName(name) {
+    return /\.(nvg|svgb)$/i.test(name);
+  }
+
+  function svgName(path) {
+    return path.replace(/\.[^./\\]*$/, "") + ".svg";
+  }
+
+  function baseName(path) {
+    return path.split("/").pop();
+  }
+
+  // ---- input ----------------------------------------------------------
+
+  $("pick-files").addEventListener("click", function () { fileInput.click(); });
+  $("pick-folder").addEventListener("click", function () { folderInput.click(); });
+
+  fileInput.addEventListener("change", function () {
+    addFiles(Array.prototype.map.call(fileInput.files, function (f) {
+      return {file: f, path: f.name};
+    }));
+    fileInput.value = "";
+  });
+
+  folderInput.addEventListener("change", function () {
+    addFiles(Array.prototype.filter.call(folderInput.files, function (f) {
+      return isNvgName(f.name);
+    }).map(function (f) {
+      return {file: f, path: f.webkitRelativePath || f.name};
+    }));
+    folderInput.value = "";
+  });
+
+  ["dragenter", "dragover"].forEach(function (type) {
+    document.addEventListener(type, function (e) {
+      e.preventDefault();
+      drop.classList.add("over");
+    });
+  });
+  ["dragleave", "dragend"].forEach(function (type) {
+    document.addEventListener(type, function (e) {
+      if (!e.relatedTarget) drop.classList.remove("over");
+    });
+  });
+  document.addEventListener("drop", function (e) {
+    e.preventDefault();
+    drop.classList.remove("over");
+    var items = e.dataTransfer.items;
+    var entries = [];
+    if (items) {
+      for (var i = 0; i < items.length; i++) {
+        var entry = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
+        if (entry) entries.push(entry);
+      }
+    }
+    if (entries.length) {
+      Promise.all(entries.map(function (en) { return walk(en, true); })).then(function (lists) {
+        addFiles([].concat.apply([], lists));
+      });
+    } else {
+      addFiles(Array.prototype.map.call(e.dataTransfer.files, function (f) {
+        return {file: f, path: f.name};
+      }));
+    }
+  });
+
+  // Collect files from a dropped entry. Dropped files are always taken;
+  // inside folders only .nvg/.svgb files are.
+  function walk(entry, topLevel) {
+    if (entry.isFile) {
+      if (!topLevel && !isNvgName(entry.name)) return Promise.resolve([]);
+      return new Promise(function (resolve) {
+        entry.file(function (f) {
+          resolve([{file: f, path: entry.fullPath.replace(/^\//, "")}]);
+        }, function () { resolve([]); });
+      });
+    }
+    if (!entry.isDirectory) return Promise.resolve([]);
+    var reader = entry.createReader();
+    var all = [];
+    return new Promise(function (resolve) {
+      (function next() {
+        reader.readEntries(function (batch) {
+          if (!batch.length) {
+            Promise.all(all.map(function (en) { return walk(en, false); })).then(function (lists) {
+              resolve([].concat.apply([], lists));
+            });
+            return;
+          }
+          all = all.concat(Array.prototype.slice.call(batch));
+          next();
+        }, function () { resolve([]); });
+      })();
+    });
+  }
+
+  // ---- decoding -------------------------------------------------------
+
+  function addFiles(items) {
+    items.sort(function (a, b) { return a.path.localeCompare(b.path); });
+    var known = {};
+    results.forEach(function (r) { known[r.path] = true; });
+    items = items.filter(function (it) { return !known[it.path]; });
+    if (!items.length) {
+      if (!results.length) showEmpty();
+      return;
+    }
+    Promise.all(items.map(function (it) {
+      return it.file.arrayBuffer().then(function (buf) {
+        return decodeOne(it.path, new Uint8Array(buf));
+      }, function (err) {
+        return {path: it.path, svg: null, warnings: [], error: "could not read file: " + err.message, log: []};
+      });
+    })).then(function (decoded) {
+      decoded.forEach(function (r) {
+        results.push(r);
+        $("results").appendChild(renderCard(r));
+      });
+      updateToolbar();
+    });
+  }
+
+  function decodeOne(path, data) {
+    var log = [];
+    var r = {path: path, svg: null, warnings: [], error: null, log: log, url: null};
+    try {
+      var out = NVG.decode(data, baseName(path), function (msg) { log.push(msg); });
+      r.svg = out.svg;
+      r.warnings = out.warnings;
+      r.url = URL.createObjectURL(new Blob([out.svg], {type: "image/svg+xml"}));
+    } catch (exc) {
+      r.error = exc instanceof NVG.NvgError ? exc.message : "internal error: " + exc;
+    }
+    return r;
+  }
+
+  function showEmpty() {
+    $("summary").textContent = "No .nvg or .svgb files found.";
+    $("toolbar").classList.add("show");
+    $("zip").disabled = true;
+  }
+
+  // ---- results --------------------------------------------------------
+
+  function el(tag, attrs, text) {
+    var node = document.createElement(tag);
+    for (var k in attrs) node.setAttribute(k, attrs[k]);
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function renderCard(r) {
+    var card = el("article", {"class": "card"});
+    var preview = el("div", {"class": "preview"});
+    if (r.url) {
+      // <img> renders the SVG without running anything inside it.
+      preview.appendChild(el("img", {src: r.url, alt: "Preview of " + baseName(r.path)}));
+    } else {
+      preview.appendChild(el("div", {"class": "failed"}, "Could not decode"));
+    }
+    card.appendChild(preview);
+
+    var meta = el("div", {"class": "meta"});
+    meta.appendChild(el("div", {"class": "name"}, r.path));
+    var status;
+    if (r.error) {
+      status = el("div", {"class": "status err"}, r.error);
+    } else if (r.warnings.length) {
+      status = el("div", {"class": "status warn"},
+                  r.warnings.length + (r.warnings.length === 1 ? " warning" : " warnings"));
+    } else {
+      status = el("div", {"class": "status ok"}, "Decoded");
+    }
+    meta.appendChild(status);
+
+    if (r.log.length || r.warnings.length) {
+      var details = el("details");
+      details.appendChild(el("summary", {}, "Details"));
+      details.appendChild(el("pre", {}, r.log.join("\n")));
+      meta.appendChild(details);
+    }
+
+    if (r.svg) {
+      var actions = el("div", {"class": "actions"});
+      var dl = el("button", {type: "button"}, "Download SVG");
+      dl.addEventListener("click", function () { save(r.url, baseName(svgName(r.path))); });
+      var copy = el("button", {type: "button"}, "Copy SVG");
+      copy.addEventListener("click", function () {
+        navigator.clipboard.writeText(r.svg).then(function () {
+          flash(copy, "Copied");
+        }, function () {
+          flash(copy, "Copy failed");
+        });
+      });
+      actions.appendChild(dl);
+      actions.appendChild(copy);
+      meta.appendChild(actions);
+    }
+    card.appendChild(meta);
+    return card;
+  }
+
+  function flash(button, text) {
+    var old = button.textContent;
+    button.textContent = text;
+    setTimeout(function () { button.textContent = old; }, 1200);
+  }
+
+  function updateToolbar() {
+    var ok = results.filter(function (r) { return r.svg; }).length;
+    var warned = results.filter(function (r) { return r.svg && r.warnings.length; }).length;
+    var failed = results.length - ok;
+    var summary = $("summary");
+    summary.textContent = "";
+    summary.appendChild(el("b", {}, String(ok)));
+    summary.appendChild(document.createTextNode(" of " + results.length + " decoded" +
+      (warned ? ", " + warned + " with warnings" : "") +
+      (failed ? ", " + failed + " failed" : "")));
+    $("zip").disabled = ok === 0;
+    $("toolbar").classList.toggle("show", results.length > 0);
+  }
+
+  function save(url, name) {
+    var a = el("a", {href: url, download: name});
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  $("clear").addEventListener("click", function () {
+    results.forEach(function (r) { if (r.url) URL.revokeObjectURL(r.url); });
+    results = [];
+    $("results").textContent = "";
+    $("toolbar").classList.remove("show");
+  });
+
+  $("zip").addEventListener("click", function () {
+    var files = results.filter(function (r) { return r.svg; }).map(function (r) {
+      return {name: svgName(r.path), data: new TextEncoder().encode(r.svg)};
+    });
+    var url = URL.createObjectURL(makeZip(files));
+    save(url, "nvg2svg.zip");
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+  });
+
+  document.querySelectorAll(".bg-pick button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.body.setAttribute("data-bg", b.getAttribute("data-bg"));
+      document.querySelectorAll(".bg-pick button").forEach(function (o) {
+        o.setAttribute("aria-pressed", String(o === b));
+      });
+      try { localStorage.setItem("nvg2svg-bg", b.getAttribute("data-bg")); } catch (e) {}
+    });
+  });
+  try {
+    var savedBg = localStorage.getItem("nvg2svg-bg");
+    var savedBtn = savedBg && document.querySelector('.bg-pick button[data-bg="' + savedBg + '"]');
+    if (savedBtn) savedBtn.click();
+  } catch (e) {}
+
+  // ---- zip (stored, no compression) -----------------------------------
+
+  var CRC_TABLE = (function () {
+    var t = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+
+  function crc32(data) {
+    var c = 0xFFFFFFFF;
+    for (var i = 0; i < data.length; i++) c = CRC_TABLE[(c ^ data[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function makeZip(files) {
+    var now = new Date();
+    var time = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+    var date = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+    var parts = [], central = [], offset = 0;
+    files.forEach(function (f) {
+      var name = new TextEncoder().encode(f.name);
+      var crc = crc32(f.data);
+      var local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034b50, true);
+      local.setUint16(4, 20, true);
+      local.setUint16(6, 0x0800, true);  // UTF-8 names
+      local.setUint16(8, 0, true);       // stored
+      local.setUint16(10, time, true);
+      local.setUint16(12, date, true);
+      local.setUint32(14, crc, true);
+      local.setUint32(18, f.data.length, true);
+      local.setUint32(22, f.data.length, true);
+      local.setUint16(26, name.length, true);
+      parts.push(local.buffer, name, f.data);
+
+      var cd = new DataView(new ArrayBuffer(46));
+      cd.setUint32(0, 0x02014b50, true);
+      cd.setUint16(4, 20, true);
+      cd.setUint16(6, 20, true);
+      cd.setUint16(8, 0x0800, true);
+      cd.setUint16(10, 0, true);
+      cd.setUint16(12, time, true);
+      cd.setUint16(14, date, true);
+      cd.setUint32(16, crc, true);
+      cd.setUint32(20, f.data.length, true);
+      cd.setUint32(24, f.data.length, true);
+      cd.setUint16(28, name.length, true);
+      cd.setUint32(42, offset, true);
+      central.push(cd.buffer, name);
+      offset += 30 + name.length + f.data.length;
+    });
+    var cdSize = central.reduce(function (n, p) { return n + p.byteLength; }, 0);
+    var end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, files.length, true);
+    end.setUint16(10, files.length, true);
+    end.setUint32(12, cdSize, true);
+    end.setUint32(16, offset, true);
+    return new Blob(parts.concat(central, [end.buffer]), {type: "application/zip"});
+  }
+})();
+</script>
+</body>
+</html>
