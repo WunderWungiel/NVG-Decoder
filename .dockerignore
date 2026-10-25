@@ -1,0 +1,4 @@
+*
+!web/index.html
+!web/nvg2svg.js
+!docker/nginx.conf

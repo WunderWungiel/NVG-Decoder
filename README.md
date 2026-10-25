@@ -6,9 +6,15 @@ It is a single Python 3 script. It needs only the standard library and runs on W
 
 ## In the browser
 
-**https://wunderwungiel.github.io/NVG-Decoder/** converts files without installing anything. Drop in `.nvg` files or whole folders, preview the results, and download each SVG or all of them as a zip. Decoding runs locally in the browser, so files are never uploaded.
+`web/index.html` converts files without installing anything. Drop in `.nvg` files or whole folders, preview the results, and download each SVG or all of them as a zip. Decoding runs locally in the browser, so files are never uploaded.
 
-The page is `web/index.html` and also works when opened straight from disk.
+Open the page straight from disk, or serve it with the bundled nginx container:
+
+```
+docker compose up -d --build     # http://localhost:8080
+```
+
+To use another port, set `PORT` in `.env` (see `.env.example`).
 
 ## Command line
 
@@ -36,4 +42,4 @@ The format was reverse-engineered from `svgtbinencode.exe` (run with `-v 5`), th
 
 Some features were verified against real encoder output: paths, fills, linear gradients, arcs and full-matrix transforms. Others are inferred only from the decompiled encoder: strokes, radial gradients, and translate-only or scale-only transforms. If one of these decodes incorrectly, please open an issue and attach the file.
 
-`web/nvg2svg.js` is a JavaScript port of the decoder for the browser version. `node web/check.js examples --fuzz 5000` checks that it produces exactly the same SVG and warnings as `nvg2svg.py`, on the examples and on randomly corrupted copies of them. The Pages workflow runs this check before every deploy.
+`web/nvg2svg.js` is a JavaScript port of the decoder for the browser version. `node web/check.js examples --fuzz 5000` checks that it produces exactly the same SVG and warnings as `nvg2svg.py`, on the examples and on randomly corrupted copies of them.
