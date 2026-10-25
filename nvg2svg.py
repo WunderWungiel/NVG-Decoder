@@ -136,7 +136,11 @@ def color_hex(r, g, b):
 
 
 def unit_to_byte(v):
-    return max(0, min(255, int(round(v * 255))))
+    if not v > 0:  # also catches NaN
+        return 0
+    if v >= 1:
+        return 255
+    return int(round(v * 255))
 
 
 class Reader:
@@ -513,7 +517,9 @@ class SvgBuilder:
         x, y, w, h = self.nvg.viewbox
         out = ['<?xml version="1.0" encoding="UTF-8"?>']
         if self.source_name:
-            name = self.source_name.replace("--", "- -")
+            name = self.source_name
+            while "--" in name:  # "--" is not allowed inside an XML comment
+                name = name.replace("--", "- -")
             out.append("<!-- Decoded from %s by nvg2svg %s -->" % (name, __version__))
         out.append('<svg xmlns="http://www.w3.org/2000/svg" version="1.1" '
                    'width="%s" height="%s" viewBox="%s %s %s %s">'
