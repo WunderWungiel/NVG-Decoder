@@ -34,7 +34,9 @@ Non-obvious format facts (all verified in the decompiled encoder):
 - The gradient matrix is stored row-major (a c e b d f).
 - The encoder stores opacity 1 (not 255) for gradient strokes. This is handled as fully opaque.
 
-Features the examples don't exercise, so these are inferred only from decompilation: strokes, transforms, radial gradients, and arcs (circles and ellipses become relative SCCWARC segments, 0x13). If a new sample NVG uses these, verify the output against it.
+The encoder always names its output `.svgb`, even when the file is NVG. `examples/circles.svgb` and `examples/transform.svgb` are NVG, and `original/` holds their source SVGs. Rendering a source SVG and the decoded SVG with `rsvg-convert` should give identical output (`magick compare -metric AE`). These two files verify arcs (circles become relative SCCWARC segments, 0x13, plus two trailing junk coordinates) and full-matrix transforms (flags 0).
+
+`examples/strokes.svgb` is real SVGB, because `stroke-dasharray` triggered the encoder's fallback, and the decoder rejects it. Strokes (opcodes 0x05, 0x09–0x0b), partial transforms (translate- or scale-only flags) and radial gradients are still inferred only from decompilation.
 
 ## Re-inspecting the encoder
 
