@@ -1,0 +1,4 @@
+the encoder did not record the attributeName of <animate> at 0x72 (it cannot animate that attribute)
+the encoder did not record the attributeName of <animate> at 0x140 (it cannot animate that attribute)
+the encoder did not record the attributeName of <set> at 0x15e (it cannot animate that attribute)
+the encoder did not record the attributeName of <set> at 0x198 (it cannot animate that attribute)

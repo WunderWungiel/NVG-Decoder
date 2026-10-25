@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Decoded from 15-anim-motion.svgb by nvg2svg 1.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <path id="track" d="M10 150 C50 50 150 50 190 150" fill="none" stroke="#808080"/>
+  <circle r="5">
+    <animateMotion dur="5s" path="M10 10 L190 10 L190 190"/>
+  </circle>
+  <circle r="5">
+    <animateMotion dur="5s" rotate="auto" path="M10 10 L190 10"/>
+  </circle>
+  <circle r="5">
+    <animateMotion dur="5s" rotate="auto-reverse" path="M10 10 L190 10"/>
+  </circle>
+  <circle r="5">
+    <animateMotion dur="5s" rotate="45" path="M10 10 L190 10"/>
+  </circle>
+  <circle r="5">
+    <animateMotion dur="5s" path="M0 0 L100 50"/>
+  </circle>
+  <circle r="5">
+    <animateMotion dur="5s" path="M0 0 L50 50 L100 0"/>
+  </circle>
+  <circle r="5">
+    <animateMotion dur="5s" calcMode="linear" path="M0 0 L100 0 L100 100"/>
+  </circle>
+  <circle r="5" fill="#008000">
+    <animateMotion dur="5s">
+      <mpath xlink:href="#track"/>
+    </animateMotion>
+  </circle>
+</svg>

@@ -53,11 +53,11 @@ SVGB (all four variants: S60v3 BGR float and fixed point, S60v3 FP2, Symbian^3 R
 - Stroke properties, including dashes
 - Text, including SVG fonts
 - Links, `use`, `switch`, and embedded or linked images
-- Basic animation (`attributeName`, `from`/`to`/`by`, `dur`, `repeatDur`, `calcMode`, `fill`, `additive`, `accumulate`, `restart`)
+- Animation (`animate`, `set`, `animateColor`, `animateTransform`, `animateMotion`), except `keySplines`
 
-Files that use `begin`, `end`, `values`, `keyTimes`, `keySplines`, `repeatCount`, `animateTransform` or `animateMotion` stop with an error naming the attribute, because their encoding is not known yet.
+Files that use `keySplines` stop with an error, because its encoding is not known yet.
 
-Some SVG features are lost when the encoder writes SVGB, so they cannot come back: arcs (written as empty paths), gradient strokes (written black), `letter-spacing`, `word-spacing`, `dx`/`dy`, `textLength`, the text of `<title>` and `<desc>`, and text longer than 127 characters (cut short).
+Some SVG features are lost when the encoder writes SVGB, so they cannot come back: arcs (written as empty paths), gradient strokes (written black), `letter-spacing`, `word-spacing`, `dx`/`dy`, `textLength`, the text of `<title>` and `<desc>`, text longer than 127 characters (cut short), animations of attributes the encoder cannot animate (such as `opacity` and `stroke-dasharray`), fractional `repeatCount` values, `keyTimes` precision (stored in steps of 1/255), `keyTimes` and `keyPoints` on `animateMotion`, and `set fill="none"` (written black).
 
 Both formats are recognised by their content, not their extension. The SDK encoder names NVG output `.svgb` too, and falls back to SVGB for some inputs, such as SVGs that use `stroke-dasharray`.
 

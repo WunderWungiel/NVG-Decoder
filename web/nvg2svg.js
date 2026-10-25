@@ -110,15 +110,40 @@
  *     data     (xlink:href, 136, used for data: URIs) u32 byte length, 8-bit text
  * Animation attributes:
  *     attributeName  u16 attribute id, then (except on animateTransform) a u8
- *              value type: 2 color, 3 number, 0x45 visibility
- *     from, to, by   u8 value type, then a value of that type
- *     dur      u32 milliseconds, then a u8 (always 0 so far)
- *     repeatDur  u32 milliseconds
+ *              value type. 0xFFFF: an attribute the encoder cannot animate
+ *              (opacity, stroke-dasharray, ...); its values are integers.
+ *     from, to, by, values  u8 value type (SVGB_ANIM_TYPES: 0 integer,
+ *              2 color, 3/0x62 number, 7 path, 0x35 display, 0x45 visibility),
+ *              then the value; values has a u16 count before the values.
+ *              On animateTransform there is no type: each value is 3 numbers
+ *              (f32 for from, fixed/float as usual otherwise), values has a
+ *              u16 count, and type (80) is a u8 code (0x1F translate,
+ *              0x20 rotate, 0x21 scale, 0x22 skewX, 0x23 skewY) and a u8 count
+ *              of the numbers that are used.
+ *     begin    u8 1 for indefinite. Otherwise u8 count, then per value
+ *              s32 time (ms), s32 offset (ms), 4 junk bytes, string element
+ *              id ("unid" when none), 2 junk bytes, u8 event (SVGB_EVENTS,
+ *              0xFF for a plain clock value); then u8 n, n s32 resolved
+ *              times and 9 more bytes computed by the encoder.
+ *     end      u8 0, u8 event, 4 junk bytes, string element id, s32 time
+ *              (clock value) or offset (event)
+ *     dur, repeatDur  s32 milliseconds, 0x7FFFFFFF indefinite; dur is
+ *              followed by a u8 (always 0 so far)
+ *     repeatCount  u32 whole count (the encoder drops fractions), 0xFFFF
+ *              indefinite
+ *     keyTimes u16 count, u16 values of time * 255
+ *     calcMode, restart  u8 enums
  *     accumulate (116), additive (117), fill (135): no value; present means
  *              sum, sum and freeze
- * Attribute ids from the encoder whose value encoding is not known yet
- * (begin, end, values, keyTimes, ...) stop decoding with an error,
- * since their length is unknown.
+ *     animateMotion: the path (or from/to/values, which the encoder turns
+ *              into a path) is attribute 122: a path, then a u8 (0x94 when
+ *              an <mpath> child gives the path and the path is empty).
+ *              rotate is an s16: degrees, -100 auto, -200 auto-reverse.
+ *              <mpath> has a u8 1 between its href and the repeated id.
+ *     keySplines is written as a precomputed curve table whose length is not
+ *              understood yet.
+ * Attribute ids whose value encoding is not known yet stop decoding with an
+ * error, since their length is unknown.
  */
 (function (root) {
   "use strict";
@@ -764,7 +789,7 @@
     71: ["from", "animvalue"], 72: ["to", "animvalue"], 73: ["by", "animvalue"],
     74: ["attributeName", "attrname"], 75: ["pathLength"],
     76: ["version", "num"], 77: ["stroke-width"], 78: ["points", "points"], 79: ["d", "path"],
-    80: ["type"], 81: ["stop-color", "color"], 82: ["fx", "num"], 83: ["fy", "num"],
+    80: ["type", "ttype"], 81: ["stop-color", "color"], 82: ["fx", "num"], 83: ["fy", "num"],
     84: ["offset", "num"], 85: ["spreadMethod", "enum8", ["pad", "reflect", "repeat"]],
     86: ["gradientUnits", "enum8", ["userSpaceOnUse", "objectBoundingBox"]],
     87: ["stop-opacity", "num"], 88: ["viewBox", "nums4"], 89: ["baseProfile", "str"],
@@ -773,21 +798,39 @@
     97: ["requiredFeatures", "strs", " "], 98: ["systemLanguage", "strs", ","], 101: ["media"], 102: ["title"],
     103: ["xlink:actuate", "str"], 104: ["xlink:arcrole"], 105: ["xlink:role"],
     106: ["xlink:show", "str"], 107: ["xlink:title", "str"], 108: ["xlink:type", "str"],
-    109: ["xlink:href", "href"], 110: ["begin"], 111: ["dur", "dur"], 112: ["repeatCount"],
-    113: ["repeatDur", "ms"], 114: ["end"],
+    109: ["xlink:href", "href"], 110: ["begin", "begin"], 111: ["dur", "dur"], 112: ["repeatCount", "repeat"],
+    113: ["repeatDur", "ms"], 114: ["end", "end"],
     115: ["restart", "enum8", ["always", "whenNotActive", "never"]],
     116: ["accumulate", "flag", "sum"], 117: ["additive", "flag", "sum"],
-    118: ["keySplines"], 119: ["keyTimes"],
+    118: ["keySplines"], 119: ["keyTimes", "keytimes"],
     120: ["calcMode", "enum8", ["discrete", "linear", "paced", "spline"]], 121: ["path"],
+    122: ["path", "motionpath"],  // animateMotion path
     123: ["gradientTransform", "matrix"], 133: ["volume"], 134: ["audio-level"],
     135: ["fill", "flag", "freeze"],  // fill on animation elements
-    136: ["xlink:href", "data"], 163: ["values"]
+    136: ["xlink:href", "data"], 163: ["values", "values"]
   };
 
-  // Value types of animation values (from, to, by), as written after
-  // attributeName and before each value. The encoder knows more
-  // (0 7 0xd 0xf 0x35 0x49 0x61 0x62 99), but their layout is not known yet.
-  var SVGB_ANIM_TYPES = {2: "color", 3: "num", 0x45: ["enum32", ["visible", "hidden"]]};
+  // Value types of animation values (from, to, by, values), as written after
+  // attributeName and before each value. The encoder also knows 0xd, 0xf and
+  // 0x61, whose layout is not known yet; 0x49 and 99 are u32 of unknown meaning.
+  var SVGB_ANIM_TYPES = {
+    0: "int", 2: "color", 3: "num", 7: "path", 0x35: ["enum32", DISPLAY],
+    0x45: ["enum32", ["visible", "hidden"]], 0x49: "int?", 0x62: "num", 99: "int?"
+  };
+
+  // animateTransform type codes
+  var SVGB_TRANSFORMS = {0x1f: "translate", 0x20: "rotate", 0x21: "scale", 0x22: "skewX", 0x23: "skewY"};
+
+  // Event codes of begin and end values
+  var SVGB_EVENTS = [
+    "focusin", "focusout", "activate", "click", "mousedown", "mouseup", "mouseover",
+    "mousemove", "mouseout", "DOMSubtreeModified", "DOMNodeInserted", "DOMNodeRemoved",
+    "DOMNodeRemovedFromDocument", "DOMNodeInsertedIntoDocument", "DOMAttrModified",
+    "DOMCharacterDataModified", "SVGLoad", "SVGUnload", "SVGAbort", "SVGError", "SVGResize",
+    "SVGScroll", "SVGZoom", "begin", "end", "repeat"
+  ];
+  var SVGB_INDEFINITE = 0x7fffffff;
+  var SVGB_NO_EVENT = 0xff;
 
   // Path segment types -> [SVG command, coordinate count].
   var SVGB_SEGMENTS = [["M", 2], ["L", 2], ["Q", 4], ["C", 6], ["Z", 0]];
@@ -828,6 +871,8 @@
   SvgbFile.prototype.u8 = function () { return this.r.u8(this.pos++); };
   SvgbFile.prototype.u16 = function () { var v = this.r.u16(this.pos); this.pos += 2; return v; };
   SvgbFile.prototype.u32 = function () { var v = this.r.u32(this.pos); this.pos += 4; return v; };
+  SvgbFile.prototype.s16 = function () { var v = this.r.ints("s16", this.pos, 1)[0]; this.pos += 2; return v; };
+  SvgbFile.prototype.s32 = function () { var v = this.r.ints("s32", this.pos, 1)[0]; this.pos += 4; return v; };
   SvgbFile.prototype.bytes = function (n) { var v = this.r.u8s(this.pos, n); this.pos += n; return v; };
 
   SvgbFile.prototype.num = function () {
@@ -864,6 +909,20 @@
     return "#" + ("00000" + (v & 0xffffff).toString(16)).slice(-6);
   };
 
+  function clock(ms) {
+    return ms === SVGB_INDEFINITE ? "indefinite" : fmt(ms / 1000) + "s";
+  }
+
+  // One begin or end value: a clock value, or "id.event" with an offset
+  SvgbFile.prototype.timing = function (time, offset, target, event) {
+    if (event === SVGB_NO_EVENT) return clock(time);
+    var name = SVGB_EVENTS[event];
+    if (!name) throw new NvgError("unknown animation event " + event + " at 0x" + hex(this.pos));
+    var out = (target && target !== "unid" ? target + "." : "") + name;
+    if (offset) out += (offset < 0 ? "-" : "+") + clock(Math.abs(offset));
+    return out;
+  };
+
   SvgbFile.prototype.readValue = function (id, def, element) {
     var type = def[1], i, v;
     switch (type) {
@@ -882,6 +941,10 @@
         if (element === "text") return this.nums(this.u8()).map(fmt).join(" ");
         return fmt(this.num());
       case "floats":  // u8 count, then f32 values even in fixed-point files
+        if (element === "animateMotion") {  // s16 degrees, -100 auto, -200 auto-reverse
+          v = this.s16();
+          return v === -100 ? "auto" : v === -200 ? "auto-reverse" : String(v);
+        }
         var f = this.r.f32s(this.pos + 1, this.u8());
         this.pos += 4 * f.length;
         return f.map(fmt).join(" ");
@@ -917,32 +980,89 @@
         return this.readPath(type === "points");
       case "href":  // string; a local reference (#id) is followed by the id again
         var href = this.str();
-        if (href.charAt(0) === "#") this.log("  xlink:href target id " + JSON.stringify(this.str()));
+        if (href.charAt(0) === "#") {
+          if (element === "mpath") this.u8();  // a 1 before the id, seen only on mpath
+          this.log("  xlink:href target id " + JSON.stringify(this.str()));
+        }
         if (href === "") this.log("  empty xlink:href dropped");
         return href === "" ? null : href;
       case "flag":  // no value: the attribute's presence means def[2]
         return def[2];
-      case "ms":  // u32 milliseconds
-        return fmt(this.u32() / 1000) + "s";
+      case "ms":  // u32 milliseconds, 0x7FFFFFFF indefinite
+        return clock(this.s32());
       case "dur":  // u32 milliseconds, then a u8 that has been 0 in every sample
-        v = fmt(this.u32() / 1000) + "s";
+        v = clock(this.s32());
         i = this.u8();
         if (i) this.log("  dur flag byte " + i);
         return v;
+      case "repeat":  // u32 count (the encoder drops fractions), 0xFFFF indefinite
+        v = this.u32();
+        return v === 0xffff ? "indefinite" : String(v);
+      case "int":
+        return String(this.s32());
+      case "int?":
+        this.warn("animation value of unknown meaning at 0x" + hex(this.pos) + ", written as a number");
+        return String(this.s32());
+      case "begin":  // u8 1 for indefinite; else a u8 count of values, then derived times
+        if (this.u8() === 1) return "indefinite";
+        var times = [];
+        for (i = this.u8(); i > 0; i--) {
+          var time = this.s32(), offset = this.s32();
+          this.bytes(4);  // uninitialized
+          var ref = this.str();
+          this.bytes(2);  // uninitialized
+          times.push(this.timing(time, offset, ref, this.u8()));
+        }
+        this.bytes(4 * this.u8() + 9);  // resolved begin times, computed by the encoder
+        return times.join(";");
+      case "end":  // u8 0, u8 event, 4 uninitialized bytes, element id, s32 time or offset
+        i = this.u8();
+        if (i) throw new NvgError("unknown end flag " + i + " at 0x" + hex(this.pos - 1));
+        var event = this.u8();
+        this.bytes(4);
+        var endRef = this.str();
+        v = this.s32();
+        return event === SVGB_NO_EVENT ? clock(v) : this.timing(0, v, endRef, event);
+      case "keytimes":  // u16 count, u16 values of time * 255
+        var kt = [];
+        for (i = this.u16(); i > 0; i--) kt.push(fmt(Math.round(this.u16() / 255 * 100) / 100));
+        return kt.join(";");
+      case "ttype":  // animateTransform type: u8 type code, u8 parameter count
+        if (element !== "animateTransform") break;
+        i = this.u8();
+        this.anim.params = this.u8();
+        if (!SVGB_TRANSFORMS[i]) throw new NvgError("unknown transform type " + i + " at 0x" + hex(this.pos - 2));
+        return SVGB_TRANSFORMS[i];
+      case "motionpath":  // path, then a u8: 0, or 0x94 (the encoder's "missing
+                          // path" error code) when an <mpath> child gives the path
+        v = this.readPath(false);
+        i = this.u8();
+        if (i) this.log("  byte after motion path: 0x" + hex(i));
+        return v === "" ? null : v;
       case "attrname":  // u16 attribute id; except on animateTransform, then a u8 value type
         i = this.u16();
+        if (element !== "animateTransform") this.log("  value type " + this.u8());
+        if (i === 0xffff) {
+          this.warn("the encoder did not record the attributeName of <" + element + "> at 0x" +
+                    hex(this.pos) + " (it cannot animate that attribute)");
+          return null;
+        }
         var target = SVGB_ATTRS[i];
         if (!target) throw new NvgError("attributeName refers to unknown attribute " + i);
-        if (element !== "animateTransform") this.log("  value type " + this.u8());
+        this.anim.target = target[0];
         return target[0];
       case "animvalue":  // u8 value type, then the value
-        i = this.u8();
-        var vt = SVGB_ANIM_TYPES[i];
-        if (!vt) {
-          throw new NvgError("unknown animation value type " + i + " at 0x" + hex(this.pos - 1) +
-                             ": its encoding is not known yet");
+        if (element === "animateTransform") return this.transformValue(id === 71);
+        return this.animValue(id, def[0], element);
+      case "values":  // [u8 value type,] u16 count, values
+        var vals = [];
+        if (element === "animateTransform") {
+          for (i = this.u16(); i > 0; i--) vals.push(this.transformValue(false));
+        } else {
+          var t = this.u8();
+          for (i = this.u16(); i > 0; i--) vals.push(this.animValue(id, def[0], element, t));
         }
-        return this.readValue(id, typeof vt === "string" ? [def[0], vt] : [def[0]].concat(vt), element);
+        return vals.join(";");
       case "data":  // u32 byte length, then 8-bit text (data: URIs of images)
         var n = this.u32();
         var b = this.bytes(n), s = "";
@@ -951,6 +1071,26 @@
     }
     throw new NvgError("cannot decode SVGB attribute " + id + " (" + def[0] + ") at 0x" +
                        hex(this.pos - 2) + ": its encoding is not known yet");
+  };
+
+  // One animation value: u8 value type (unless given), then the value
+  SvgbFile.prototype.animValue = function (id, name, element, type) {
+    if (type === undefined) type = this.u8();
+    var vt = SVGB_ANIM_TYPES[type];
+    if (!vt) {
+      throw new NvgError("unknown animation value type " + type + " at 0x" + hex(this.pos - 1) +
+                         ": its encoding is not known yet");
+    }
+    if (vt === "path") return this.readPath(this.anim.target === "points");
+    return this.readValue(id, typeof vt === "string" ? [name, vt] : [name].concat(vt), element);
+  };
+
+  // animateTransform value: 3 numbers (f32 for from, as the encoder writes
+  // them), of which the transform type uses the first few
+  SvgbFile.prototype.transformValue = function (float) {
+    var v = float ? this.r.f32s(this.pos, 3) : this.nums(3);
+    if (float) this.pos += 12;
+    return v.slice(0, this.anim.params).map(fmt).join(" ");
   };
 
   // u16 segment count, segment types (u8 each), u16 coordinate count, numbers
@@ -1004,6 +1144,7 @@
       }
       this.log("0x" + hex(at) + " <" + name + ">");
       var el = {name: name, attrs: [], children: []};
+      this.anim = {target: null, params: 3};
       for (;;) {
         var apos = this.pos, id = this.u16();
         if (id === SVGB_END_ATTRS) break;

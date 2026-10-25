@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Decoded from 13-anim-attrs.svgb by nvg2svg 1.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <rect x="0" y="0" width="10" height="10" stroke="#000000">
+    <animate attributeName="stroke-width" dur="1s" from="1" to="5"/>
+    <animate dur="1s" from="1" to="0"/>
+    <animate attributeName="fill-opacity" dur="1s" from="1" to="0"/>
+    <animate attributeName="fill" dur="1s" from="#ff0000" to="#0000ff"/>
+    <set attributeName="display" begin="1s" to="none"/>
+    <set attributeName="fill" begin="1s" to="#000000"/>
+    <animate dur="1s" from="1" to="5"/>
+    <set begin="1s" to="0"/>
+    <set begin="1s" to="0"/>
+  </rect>
+  <path d="M0 0 L10 0 L10 10 Z">
+    <animate attributeName="d" dur="1s" from="M0 0 L10 0 L10 10 Z" to="M0 0 L20 0 L20 20 Z"/>
+  </path>
+  <polygon points="0,0 10,0 10,10">
+    <animate attributeName="points" dur="1s" from="0,0 10,0 10,10" to="0,0 20,0 20,20"/>
+  </polygon>
+  <text x="10" y="50" font-size="10"><animate attributeName="font-size" dur="1s" from="10" to="20"/>Hi</text>
+  <g>
+    <set attributeName="visibility" begin="1s" to="hidden"/>
+  </g>
+</svg>

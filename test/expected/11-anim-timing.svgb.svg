@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Decoded from 11-anim-timing.svgb by nvg2svg 1.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <rect id="r1" x="0" y="0" width="10" height="10">
+    <animate attributeName="x" dur="1s" from="0" to="100"/>
+    <animate attributeName="x" begin="2.5s" dur="0.5s" from="0" to="100"/>
+    <animate attributeName="x" begin="indefinite" dur="1s" from="0" to="100"/>
+    <animate attributeName="x" begin="r1.click" dur="1s" from="0" to="100"/>
+    <animate attributeName="x" begin="r1.end+1s" dur="1s" from="0" to="100"/>
+    <animate attributeName="x" begin="0s;3s" dur="1s" from="0" to="100"/>
+    <animate attributeName="x" begin="1s" end="4s" dur="1s" from="0" to="100"/>
+    <animate attributeName="x" end="r1.click" dur="1s" from="0" to="100"/>
+    <animate attributeName="x" dur="indefinite" from="0" to="100"/>
+    <animate attributeName="x" dur="2s" repeatCount="3" from="0" to="100"/>
+    <animate attributeName="x" dur="2s" repeatCount="2" from="0" to="100"/>
+    <animate attributeName="x" dur="2s" repeatCount="indefinite" from="0" to="100"/>
+    <animate attributeName="x" dur="2s" repeatDur="indefinite" from="0" to="100"/>
+    <animate attributeName="x" dur="2s" restart="never" from="0" to="100"/>
+    <animate attributeName="x" dur="2s" restart="always" from="0" to="100"/>
+  </rect>
+</svg>
