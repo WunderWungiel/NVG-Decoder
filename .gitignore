@@ -1,0 +1,20 @@
+# Reference encoder (third-party Windows binaries)
+/SVG2Binary*/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Encoder log
+nvgencoder.log
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
