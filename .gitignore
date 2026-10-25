@@ -1,11 +1,6 @@
-# Reference encoder (third-party Windows binaries)
+# Reference encoder and SVGB converter (third-party Windows binaries)
 /SVG2Binary*/
-
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
+/SVG_SVGB_SVG2DAT*/
 
 # Encoder log
 nvgencoder.log

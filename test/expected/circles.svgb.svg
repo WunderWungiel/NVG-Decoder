@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Decoded from circles.svgb by nvg2svg 1.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <path d="M180 100 a80 80 0 0 1 -160 0 a80 80 0 0 1 160 0 Z" fill="#364fc7"/>
+  <path d="M155 100 a55 55 0 0 1 -110 0 a55 55 0 0 1 110 0 Z" fill="#4c6ef5"/>
+  <path d="M130 100 a30 30 0 0 1 -60 0 a30 30 0 0 1 60 0 Z" fill="#91a7ff"/>
+  <path d="M70 60 a10 10 0 0 1 -20 0 a10 10 0 0 1 20 0 Z" fill="#ffd43b"/>
+  <path d="M156 140 a6 6 0 0 1 -12 0 a6 6 0 0 1 12 0 Z" fill="#ff8787"/>
+</svg>

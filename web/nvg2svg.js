@@ -1,17 +1,76 @@
 /* nvg2svg.js - decode Nokia NVG (Symbian^3 vector graphics) files back to SVG.
  *
- * JavaScript port of nvg2svg.py, for the browser version. The format spec
- * lives in the docstring of nvg2svg.py; this file mirrors that script
- * function by function and must produce byte-identical SVG and the same
- * warnings. `node web/check.js examples` compares the two.
- *
  * Works as a classic <script> (defines window.NVG2SVG) and as a CommonJS
- * module, so index.html also runs from file:// without a server.
+ * module, so index.html also runs from file:// without a server. cli.js is
+ * the command-line front end, check.js the regression and fuzz test.
+ *
+ * This comment is the authoritative format spec; keep it in sync with the code.
+ *
+ * NVG format (as written by svgtbinencode.exe -v 5, reverse-engineered)
+ * =====================================================================
+ * All values are little-endian. Offsets are absolute file positions.
+ *
+ * Header (52 bytes)
+ *     0x00  "nvg"
+ *     0x03  u8   version (2)
+ *     0x04  u16  header size (0x34)
+ *     0x06  u16  reserved
+ *     0x08  16 bytes reserved
+ *     0x18  u16  reserved
+ *     0x1a  u16  path datatype (always 3 in practice)
+ *     0x1c  f32  scale  -- stale: the encoder writes the header before it
+ *     0x20  f32  bias      computes the real scale, so we derive the scale
+ *                          from the datatype instead (see PATH_DATATYPES)
+ *     0x24  f32  viewBox x, y, width, height
+ *
+ * Offset vector (at header size)
+ *     u16 count, count x u16 offsets of data blocks (paints, ramps, paths),
+ *     padded with a u16 so the command section is 4-byte aligned.
+ *
+ * Command section
+ *     u16 count, u16 reserved, then `count` commands. Each starts with a
+ *     u32: opcode in bits 24-31, the rest depends on the opcode:
+ *     0x04 SET_FILL_PAINT    bits 16-23 opacity (0-255), bits 0-15 block index
+ *     0x05 SET_STROKE_PAINT  bits 16-23 opacity (0-255), bits 0-15 block index
+ *     0x06 SET_COLOR_RAMP    bits 0-15 ramp block index; applies to the gradient
+ *                            paint set by the preceding fill/stroke command
+ *     0x07 DRAW_PATH         bits 16-23 paint mode (1 = stroke, 2 = fill),
+ *                            bits 0-15 path block index
+ *     0x08 SET_TRANSFORM     bits 16-23 flags, then f32 payload:
+ *                            flags == 1: identity (no payload)
+ *                            flags == 0: sx sy shx shy tx ty
+ *                            otherwise:  0x08 -> 4 floats (never emitted),
+ *                                        0x02 -> sx sy, 0x04 -> shx shy,
+ *                                        0x10 -> tx ty (in that order)
+ *                            The transform replaces the current one.
+ *     0x09 SET_STROKE_WIDTH  followed by f32 width
+ *     0x0a SET_LINE_JOIN_CAP bits 8-15 join (1 bevel, 2 miter, 3 round),
+ *                            bits 0-7 cap (1 butt, 2 square, 3 round)
+ *     0x0b SET_MITER_LIMIT   followed by f32 limit
+ *     0x00                   no-op (written for a ramp command without ramp)
+ *
+ * Path block (4-byte aligned)
+ *     u16 segment count, segment bytes (OpenVG VGPathSegment|VGPathAbsRel:
+ *     0 close, 2 move, 4 line, 6 hline, 8 vline, 10 quad, 12 cubic,
+ *     14 smooth quad, 16 smooth cubic, 18/20/22/24 small-ccw/small-cw/
+ *     large-ccw/large-cw arc; +1 = relative), then the coordinates.
+ *     Datatype 3: aligned to 4, s32 values = coordinate * 65536.
+ *     Circles/ellipses are written as move + two relative arcs + close.
+ *
+ * Paint block (4-byte aligned), starts with u32 (flags << 16 | type)
+ *     type 1 flat color: u32 0xRRGGBBAA
+ *     type 2 linear gradient: f32 x1 y1 x2 y2
+ *     type 3 radial gradient: f32 cx cy fx fy r
+ *     For types 2/3 with flags & 1, a gradient matrix follows:
+ *     f32 a c e b d f (row-major), i.e. SVG matrix(a b c d e f).
+ *     Gradients are in user space (userSpaceOnUse).
+ *     type 4 color ramp: stop count in bits 16-23, then per stop
+ *     f32 offset, r, g, b, a (components 0..1).
  */
 (function (root) {
   "use strict";
 
-  var VERSION = "1.0";  // keep equal to __version__ in nvg2svg.py
+  var VERSION = "1.0";
 
   var HEADER_SIZE_MIN = 0x34;
 
@@ -60,8 +119,8 @@
     return n.toString(16);
   }
 
-  // Python's "%.4f" rounds exact ties half-to-even, toFixed() rounds them
-  // away from zero. A double is an exact tie at the 5th decimal only when it
+  // "%.4f" with exact ties rounded half-to-even (as the original Python
+  // decoder did, so outputs stay stable); toFixed() rounds them away from zero. A double is an exact tie at the 5th decimal only when it
   // is an odd multiple of 1/32, which datatype 3 coordinates (n / 65536)
   // easily are, so handle that case by hand.
   function fixed4(v) {
@@ -75,7 +134,7 @@
       return (v < 0 ? "-" : "") + s.slice(0, -4) + "." + s.slice(-4);
     }
     // toFixed() switches to exponent notation from 1e21; such doubles are
-    // integers, so print them exactly like Python does.
+    // integers, so print them exactly.
     if (Math.abs(v) >= 1e21) return BigInt(v).toString() + ".0000";
     return v.toFixed(4);
   }
@@ -88,7 +147,7 @@
     return s;
   }
 
-  // Python's %g, for log messages only.
+  // printf's %g, for log messages only.
   function fmtG(v) {
     if (!isFinite(v)) return String(v).toLowerCase();
     var s = Number(v.toPrecision(6)).toString();
@@ -101,7 +160,7 @@
     }).join("");
   }
 
-  // Python's round(): half to even.
+  // Round half to even.
   function roundHalfEven(x) {
     var r = Math.round(x);
     if (Math.abs(x % 1) === 0.5 && r % 2 !== 0) r -= 1;
@@ -552,7 +611,7 @@
       } else if (op === 0x08) {
         this.transform = cmd.matrix;
         log("cmd SET_TRANSFORM flags=0x" + hex(cmd.flags) + " " +
-            (cmd.matrix ? "[" + cmd.matrix.map(fmtG).join(", ") + "]" : "None"));
+            (cmd.matrix ? "[" + cmd.matrix.map(fmtG).join(", ") + "]" : "identity"));
       } else if (op === 0x09) {
         this.strokeWidth = cmd.value;
         log("cmd SET_STROKE_WIDTH " + fmtG(cmd.value));

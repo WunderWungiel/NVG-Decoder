@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Decoded from transform.svgb by nvg2svg 1.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <path d="M-30 -30 l60 0 l0 60 l-60 0 Z" fill="#f59f00" transform="matrix(0.7071 0.7071 -0.7071 0.7071 100 100)"/>
+  <path d="M-20 -20 l40 0 l0 40 l-40 0 Z" fill="#e8590c" transform="matrix(0.8485 0.8485 -0.4243 0.4243 100 100)"/>
+  <path d="M0 -18 L16 12 L-16 12 Z" fill="#2b8a3e" transform="matrix(0.9397 -0.342 0.342 0.9397 40 40)"/>
+  <path d="M0 -18 L16 12 L-16 12 Z" fill="#1971c2" transform="matrix(-1.3156 0.4788 -0.4788 -1.3156 160 160)"/>
+</svg>

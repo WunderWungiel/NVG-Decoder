@@ -1,39 +1,26 @@
 #!/usr/bin/env node
-/* Check that web/nvg2svg.js decodes exactly like nvg2svg.py.
+/* Regression and fuzz test for web/nvg2svg.js.
  *
- *   node web/check.js examples              compare on every file in examples/
- *   node web/check.js examples --fuzz 2000  also on 2000 mutated copies
+ *   node web/check.js examples              compare with the outputs in test/expected/
+ *   node web/check.js examples --fuzz 5000  also decode 5000 mutated copies
+ *   node web/check.js examples --update     rewrite test/expected/ from the current decoder
  *
- * Both decoders get the same bytes; the SVG text, the warnings and the error
- * message (if any) must be identical. Needs python3 on PATH.
+ * For an input "x.nvg", test/expected/ holds "x.nvg.svg" (decoded) or
+ * "x.nvg.error" (rejected), plus "x.nvg.warnings" if there were any. The SVG
+ * text, the warnings and the error message must match exactly. Fuzzed inputs
+ * have no expected output; they only have to decode or be rejected with an
+ * NvgError, never crash.
  */
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
-const {execFileSync} = require("child_process");
 const NVG = require("./nvg2svg.js");
 
-const REPO = path.resolve(__dirname, "..");
+const EXPECTED_DIR = path.resolve(__dirname, "..", "test", "expected");
+const KINDS = ["svg", "error", "warnings"];
 
-const PY_DECODE = `
-import base64, json, sys
-sys.path.insert(0, sys.argv[1])
-import nvg2svg
-out = []
-for item in json.load(sys.stdin):
-    data = base64.b64decode(item["b64"])
-    try:
-        svg, warnings = nvg2svg.decode(data, item["name"])
-        out.append({"svg": svg, "warnings": warnings, "error": None})
-    except nvg2svg.NvgError as exc:
-        out.append({"svg": None, "warnings": [], "error": str(exc)})
-    except Exception as exc:
-        out.append({"svg": None, "warnings": [], "error": "crash: %s: %s" % (type(exc).__name__, exc)})
-json.dump(out, sys.stdout)
-`;
-
-function jsDecode(data, name) {
+function decode(data, name) {
   try {
     const r = NVG.decode(data, name);
     return {svg: r.svg, warnings: r.warnings, error: null};
@@ -43,11 +30,37 @@ function jsDecode(data, name) {
   }
 }
 
-function pyDecodeAll(cases) {
-  const input = JSON.stringify(cases.map(c => ({name: c.name, b64: Buffer.from(c.data).toString("base64")})));
-  const out = execFileSync("python3", ["-I", "-c", PY_DECODE, REPO],
-                           {input, maxBuffer: 1 << 30, encoding: "utf8"});
-  return JSON.parse(out);
+function expectedPath(name, kind) {
+  return path.join(EXPECTED_DIR, name + "." + kind);
+}
+
+function readExpected(name) {
+  const read = kind => {
+    try {
+      return fs.readFileSync(expectedPath(name, kind), "utf8");
+    } catch (exc) {
+      if (exc.code === "ENOENT") return null;
+      throw exc;
+    }
+  };
+  const svg = read("svg"), error = read("error"), warnings = read("warnings");
+  if (svg === null && error === null) return null;
+  return {svg: svg, warnings: warnings === null ? [] : warnings.replace(/\n$/, "").split("\n"),
+          error: error === null ? null : error.replace(/\n$/, "")};
+}
+
+function writeExpected(name, result) {
+  fs.mkdirSync(EXPECTED_DIR, {recursive: true});
+  const content = {
+    svg: result.svg,
+    error: result.error === null ? null : result.error + "\n",
+    warnings: result.warnings.length ? result.warnings.join("\n") + "\n" : null
+  };
+  for (const kind of KINDS) {
+    const p = expectedPath(name, kind);
+    if (content[kind] !== null) fs.writeFileSync(p, content[kind]);
+    else fs.rmSync(p, {force: true});
+  }
 }
 
 function collect(inputs) {
@@ -90,52 +103,72 @@ function mutate(base, rand) {
 }
 
 function main(argv) {
-  let fuzz = 0, seed = 1;
+  let fuzz = 0, seed = 1, update = false;
   const inputs = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--fuzz") fuzz = parseInt(argv[++i], 10);
     else if (argv[i] === "--seed") seed = parseInt(argv[++i], 10);
+    else if (argv[i] === "--update") update = true;
     else inputs.push(argv[i]);
   }
   if (!inputs.length) {
-    console.error("usage: node web/check.js FILE|DIR... [--fuzz N] [--seed S]");
+    console.error("usage: node web/check.js FILE|DIR... [--fuzz N] [--seed S] [--update]");
     return 2;
   }
 
-  const cases = collect(inputs).map(f => ({name: path.basename(f), label: f, data: fs.readFileSync(f)}));
-  const bases = cases.filter(c => c.data.length);
+  const files = collect(inputs).map(f => ({name: path.basename(f), label: f, data: fs.readFileSync(f)}));
+  let failures = 0, decoded = 0, rejected = 0;
+  const count = r => { if (r.error) rejected++; else decoded++; };
+
+  for (const f of files) {
+    const got = decode(f.data, f.name);
+    if (got.error && got.error.startsWith("crash:")) {
+      failures++;
+      console.log("FAIL " + f.label + "\n  " + got.error);
+      continue;
+    }
+    count(got);
+    if (update) {
+      writeExpected(f.name, got);
+      console.log("wrote " + f.label);
+      continue;
+    }
+    const want = readExpected(f.name);
+    if (want === null) {
+      failures++;
+      console.log("FAIL " + f.label + "  (no expected output; run with --update)");
+      continue;
+    }
+    if (JSON.stringify(got) === JSON.stringify(want)) {
+      console.log("ok   " + f.label + (got.error ? "  (rejected: " + got.error + ")" : ""));
+      continue;
+    }
+    failures++;
+    console.log("FAIL " + f.label);
+    for (const key of ["error", "warnings", "svg"]) {
+      const a = JSON.stringify(want[key]), b = JSON.stringify(got[key]);
+      if (a !== b) {
+        console.log("  expected " + key + ": " + a.slice(0, 400));
+        console.log("  got      " + key + ": " + b.slice(0, 400));
+      }
+    }
+  }
+
+  const bases = files.filter(f => f.data.length);
   const rand = mulberry32(seed);
   for (let i = 0; i < fuzz && bases.length; i++) {
     const base = bases[Math.floor(rand() * bases.length)];
-    cases.push({name: base.name, label: base.label + " (fuzz #" + i + ", seed " + seed + ")",
-                data: mutate(base.data, rand)});
+    const got = decode(mutate(base.data, rand), base.name);
+    if (got.error && got.error.startsWith("crash:")) {
+      failures++;
+      console.log("FAIL " + base.label + " (fuzz #" + i + ", seed " + seed + ")\n  " + got.error);
+    } else {
+      count(got);
+    }
   }
 
-  const py = pyDecodeAll(cases);
-  let failures = 0, decoded = 0, rejected = 0, pyCrashes = 0;
-  cases.forEach((c, i) => {
-    const js = jsDecode(c.data, c.name);
-    const p = py[i];
-    if (p.error && p.error.startsWith("crash:")) pyCrashes++;
-    if (JSON.stringify(js) === JSON.stringify(p)) {
-      if (p.error) rejected++; else decoded++;
-      if (i < cases.length - fuzz) {
-        console.log("ok   " + c.label + (p.error ? "  (rejected: " + p.error + ")" : ""));
-      }
-      return;
-    }
-    failures++;
-    console.log("FAIL " + c.label);
-    for (const key of ["error", "warnings", "svg"]) {
-      const a = JSON.stringify(p[key]), b = JSON.stringify(js[key]);
-      if (a !== b) {
-        console.log("  python " + key + ": " + a.slice(0, 400));
-        console.log("  js     " + key + ": " + b.slice(0, 400));
-      }
-    }
-  });
-  console.log("\n%d cases: %d decoded, %d rejected, %d mismatches%s", cases.length, decoded,
-              rejected, failures, pyCrashes ? ", " + pyCrashes + " python crashes" : "");
+  console.log("\n%d cases: %d decoded, %d rejected, %d failures", files.length + fuzz,
+              decoded, rejected, failures);
   return failures ? 1 : 0;
 }
 
