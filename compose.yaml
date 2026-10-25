@@ -1,7 +1,6 @@
 services:
   web:
     build: .
-    image: nvg-decoder
     ports:
       - "${PORT:-8080}:80"
     restart: unless-stopped
