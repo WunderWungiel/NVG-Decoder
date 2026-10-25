@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <!-- <circle> only: filled, no strokes, no transform= -->
+  <circle cx="100" cy="100" r="80" fill="#364fc7"/>
+  <circle cx="100" cy="100" r="55" fill="#4c6ef5"/>
+  <circle cx="100" cy="100" r="30" fill="#91a7ff"/>
+  <circle cx="60" cy="60" r="10" fill="#ffd43b"/>
+  <circle cx="150" cy="140" r="6" fill="#ff8787"/>
+</svg>
