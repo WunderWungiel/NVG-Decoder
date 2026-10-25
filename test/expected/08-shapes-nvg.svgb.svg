@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Decoded from 08-shapes-nvg.svgb by nvg2svg 1.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <path d="M30 20 a10 10 0 0 1 -20 0 a10 10 0 0 1 20 0 Z" fill="#000000"/>
+  <path d="M75 20 a15 8 0 0 1 -30 0 a15 8 0 0 1 30 0 Z" fill="#000000"/>
+  <path d="M90 10 L120 30" fill="#000000" stroke="#000000"/>
+  <path d="M130 30 L150 10 L170 30 Z" fill="#000000"/>
+  <path d="M15 40 h30 a5 5 0 0 1 5 5 v10 a5 5 0 0 1 -5 5 h-30 a5 5 0 0 1 -5 -5 v-10 a5 5 0 0 1 5 -5 Z" fill="#000000"/>
+  <path d="M60 40 L80 40 L80 60 L60 60 Z" fill="#000000"/>
+  <path d="M90 40 Q100 30 110 40 Q120 50 130 40" fill="none" stroke="#000000"/>
+  <path d="M140 40 C150 30 160 30 170 40 C180 50 190 50 190 40" fill="none" stroke="#000000"/>
+  <path d="M0 0 l10 0 l0 10 l-10 0 Z" fill="#000000" transform="matrix(1 0 0 1 100 100)"/>
+  <path d="M0 0 l10 0 l0 10 l-10 0 Z" fill="#000000" transform="matrix(2 0 0 3 0 0)"/>
+  <path d="M0 0 l10 0 l0 10 l-10 0 Z" fill="#000000" transform="matrix(0.7071 0.7071 -0.7071 0.7071 149.9977 -62.13)"/>
+  <path d="M0 0 l10 0 l0 10 l-10 0 Z" fill="#000000" transform="matrix(1 0 0.364 1 0 0)"/>
+  <path d="M0 0 l10 0 l0 10 l-10 0 Z" fill="#000000" transform="matrix(1 0.5 -0.5 1 20 160)"/>
+  <path d="M0 0 l10 0 l0 10 l-10 0 Z" fill="#000000" transform="matrix(0.5 0 0 0.5 5 5)"/>
+</svg>

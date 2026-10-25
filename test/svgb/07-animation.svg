@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <rect x="10" y="10" width="20" height="20" fill="red">
+    <animate attributeName="x" from="10" to="170" begin="0s" dur="3s" repeatCount="indefinite" fill="freeze"/>
+    <set attributeName="visibility" to="hidden" begin="5s"/>
+    <animateColor attributeName="fill" from="red" to="blue" begin="1s" dur="2s" restart="whenNotActive"/>
+  </rect>
+  <rect x="50" y="50" width="20" height="20">
+    <animateTransform attributeName="transform" type="rotate" values="0;90;180" keyTimes="0;0.5;1" calcMode="linear" dur="4s" additive="sum" accumulate="sum" repeatDur="10s" end="20s"/>
+    <animate attributeName="width" by="10" dur="1s" calcMode="spline" keySplines="0 0 1 1"/>
+  </rect>
+  <path id="track" d="M10 150 L190 150" fill="none" stroke="gray"/>
+  <circle r="5">
+    <animateMotion dur="5s" path="M10 150 L190 150" rotate="auto"/>
+  </circle>
+  <circle r="5" fill="green">
+    <animateMotion dur="5s"><mpath xlink:href="#track"/></animateMotion>
+  </circle>
+</svg>

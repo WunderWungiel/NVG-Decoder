@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NVG Decoder</title>
-<meta name="description" content="Convert Nokia NVG (Symbian^3) vector graphics to SVG in your browser. Files never leave your computer.">
+<meta name="description" content="Convert Nokia NVG and SVGB (Symbian) vector graphics to SVG in your browser. Files never leave your computer.">
 <style>
   :root {
     --bg: #f6f6f4;
@@ -178,13 +178,13 @@
 <body data-bg="checker">
 <main>
   <h1>NVG Decoder</h1>
-  <p class="lede">Convert Nokia NVG icons and theme graphics (Symbian^3) back to SVG. Decoding runs in your browser, so your files are never uploaded.</p>
+  <p class="lede">Convert Nokia NVG and SVGB icons and theme graphics (Symbian) back to SVG. Decoding runs in your browser, so your files are never uploaded.</p>
 
   <section id="drop" aria-label="Add files">
-    <p>Drop <code>.nvg</code> files or folders here</p>
+    <p>Drop <code>.nvg</code> or <code>.svgb</code> files or folders here</p>
     <button class="primary" id="pick-files" type="button">Choose files</button>
     <button id="pick-folder" type="button">Choose folder</button>
-    <p class="hint">The SDK encoder names NVG output <code>.svgb</code>, so <code>.svgb</code> files are accepted too.</p>
+    <p class="hint">Both formats are recognised by their content, so either extension works for either format.</p>
     <input id="file-input" class="sr-only" type="file" multiple accept=".nvg,.svgb" tabindex="-1">
     <input id="folder-input" class="sr-only" type="file" webkitdirectory multiple tabindex="-1">
   </section>

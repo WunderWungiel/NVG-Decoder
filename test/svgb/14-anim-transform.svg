@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <rect x="0" y="0" width="10" height="10">
+    <animateTransform attributeName="transform" type="translate" from="0 0" to="50 60" dur="1s"/>
+    <animateTransform attributeName="transform" type="scale" from="1" to="2 3" dur="1s"/>
+    <animateTransform attributeName="transform" type="rotate" from="0 5 5" to="90 5 5" dur="1s"/>
+    <animateTransform attributeName="transform" type="skewX" from="0" to="30" dur="1s"/>
+    <animateTransform attributeName="transform" type="skewY" from="0" to="30" dur="1s"/>
+    <animateTransform attributeName="transform" type="rotate" values="0;45;90" dur="1s"/>
+    <animateTransform attributeName="transform" type="translate" by="10 20" dur="1s"/>
+  </rect>
+</svg>

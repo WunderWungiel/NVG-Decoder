@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <text x="10" y="20" font-family="Arial" font-size="12" font-style="italic" font-weight="bold" fill="#123456">Hello</text>
+  <text x="100" y="40" text-anchor="middle" text-decoration="underline" font-weight="700">Centered</text>
+  <text x="190" y="60" text-anchor="end" font-style="oblique" font-weight="300">End</text>
+  <text x="10" y="80" letter-spacing="2" word-spacing="5">Spaced words here</text>
+  <text x="10" y="100" textLength="150">Stretched</text>
+  <text x="10 20 30 40" y="120 125 130 135" rotate="0 10 20 30" dx="1 2" dy="3 4">ABCD</text>
+  <text x="10" y="140">Unicode: ąęłżź ДЖЯ</text>
+  <text x="10" y="160" font-size="4">This line is deliberately long so that its UTF-16 encoding is more than two hundred and fifty five bytes long, which shows how long text is stored.</text>
+</svg>

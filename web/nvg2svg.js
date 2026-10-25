@@ -1,4 +1,4 @@
-/* nvg2svg.js - decode Nokia NVG (Symbian^3 vector graphics) files back to SVG.
+/* nvg2svg.js - decode Nokia NVG and SVGB (Symbian vector graphics) files back to SVG.
  *
  * Works as a classic <script> (defines window.NVG2SVG) and as a CommonJS
  * module, so index.html also runs from file:// without a server. cli.js is
@@ -66,6 +66,59 @@
  *     Gradients are in user space (userSpaceOnUse).
  *     type 4 color ramp: stop count in bits 16-23, then per stop
  *     f32 offset, r, g, b, a (components 0..1).
+ *
+ * SVGB format (Symbian SVG-T binary, reverse-engineered from debug.exe of the
+ * SVG/SVGB converter and svgtbinencode.exe)
+ * ========================================================================
+ * A serialized SVG element tree. All values are little-endian.
+ *
+ *     u32 magic 0x03FA56CC + format (0-3). Formats 1 and 2 store numbers as
+ *         s32 / 65536, formats 0 and 3 as f32. Only format 2 has been seen.
+ *     then a stream of tokens:
+ *         0x00-0x30  element (SVGB_ELEMENTS), followed by its attributes:
+ *                    u16 attribute id + value, until the u16 1000. If the next
+ *                    byte is 0xfe the element is empty and the 0xfe is
+ *                    consumed; otherwise its children follow.
+ *         0xfd       text content: string
+ *         0xfe       end of the current element
+ *         0xff       end of file
+ *
+ * Attribute values (SVGB_ATTRS gives the type of each id):
+ *     number   s32 / 65536 or f32, see above
+ *     string   u8 byte length, UTF-16LE text. The encoder truncates the length
+ *              to 8 bits, so longer text is cut short in the file itself.
+ *     strings  (systemLanguage, requiredFeatures/Extensions) u8 count, strings
+ *     color    u32 0x00RRGGBB (0x00BBGGRR in formats 0 and 1);
+ *              0x01FFFFFF none, 0x02FFFFFF currentColor
+ *     paint    (fill) u8 flag: 0 color, 1 string id of a gradient (url(#id)).
+ *              stroke is a plain color: the encoder writes gradient strokes black.
+ *     size     (width, height) on <svg> a u8 percentage flag, then a number;
+ *              on other elements just a number
+ *     coord    (x, y) a number; on <text> a u8 count and numbers
+ *     enum     u32 index (u8 for spreadMethod, gradientUnits, zoomAndPan,
+ *              restart, calcMode)
+ *     list     (stroke-dasharray) u8 count, numbers
+ *     floats   (rotate) u8 count, f32 values even in fixed-point files
+ *     transform  6 numbers a c e b d f (row-major), then u32 transform type;
+ *              gradientTransform has the 6 numbers only
+ *     path     (d, points) u16 segment count, one u8 per segment
+ *              (0 M, 1 L, 2 Q, 3 C, 4 Z; absolute), u16 coordinate count,
+ *              numbers. points ignores the segment types. The encoder writes
+ *              arcs as an empty path.
+ *     href     (xlink:href, 109) string; a local reference "#id" is followed
+ *              by a second string with the bare id
+ *     data     (xlink:href, 136, used for data: URIs) u32 byte length, 8-bit text
+ * Animation attributes:
+ *     attributeName  u16 attribute id, then (except on animateTransform) a u8
+ *              value type: 2 color, 3 number, 0x45 visibility
+ *     from, to, by   u8 value type, then a value of that type
+ *     dur      u32 milliseconds, then a u8 (always 0 so far)
+ *     repeatDur  u32 milliseconds
+ *     accumulate (116), additive (117), fill (135): no value; present means
+ *              sum, sum and freeze
+ * Attribute ids from the encoder whose value encoding is not known yet
+ * (begin, end, values, keyTimes, ...) stop decoding with an error,
+ * since their length is unknown.
  */
 (function (root) {
   "use strict";
@@ -627,16 +680,22 @@
     return this.render();
   };
 
-  SvgBuilder.prototype.render = function () {
-    var vb = this.nvg.viewbox;
+  // XML declaration and "decoded from" comment that start every output.
+  function prologue(sourceName) {
     var out = ['<?xml version="1.0" encoding="UTF-8"?>'];
-    if (this.sourceName) {
-      var name = this.sourceName;
+    if (sourceName) {
+      var name = sourceName;
       while (name.indexOf("--") !== -1) {  // "--" is not allowed inside an XML comment
         name = name.split("--").join("- -");
       }
       out.push("<!-- Decoded from " + name + " by nvg2svg " + VERSION + " -->");
     }
+    return out;
+  }
+
+  SvgBuilder.prototype.render = function () {
+    var vb = this.nvg.viewbox;
+    var out = prologue(this.sourceName);
     out.push('<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="' + fmt(vb[2]) +
              '" height="' + fmt(vb[3]) + '" viewBox="' + fmt(vb[0]) + " " + fmt(vb[1]) +
              " " + fmt(vb[2]) + " " + fmt(vb[3]) + '">');
@@ -650,11 +709,379 @@
     return out.join("\n") + "\n";
   };
 
-  // Decode NVG bytes (Uint8Array) and return {svg, warnings}.
+  // ---- SVGB ---------------------------------------------------------
+
+  // magic -> format number; formats 1 and 2 store numbers as 16.16 fixed point
+  var SVGB_MAGIC = {0x03fa56cc: 0, 0x03fa56cd: 1, 0x03fa56ce: 2, 0x03fa56cf: 3};
+  var SVGB_END_ATTRS = 1000, SVGB_TEXT = 0xfd, SVGB_END_ELEMENT = 0xfe, SVGB_END = 0xff;
+
+  var SVGB_ELEMENTS = [
+    "svg", "altGlyph", "altGlyphDef", "defs", "desc", "foreignObject", "metadata", "title",
+    "font-face-name", "font-face-src", "font-face-uri", "g", "glyphRef", "vkern", "script",
+    "switch", "view", "hkern", "a", "font", "font-face", "glyph", "image", "missing-glyph",
+    "style", "text", "use", "circle", "ellipse", "line", "path", "polygon", "polyline", "rect",
+    "animate", "animateColor", "animateMotion", "animateTransform", "set", "mpath",
+    "linearGradient", "radialGradient", "stop", "script", null, "discard", "solidColor",
+    "animation", "audio"
+  ];
+
+  var DISPLAY = [
+    "inline", "block", "list-item", "run-in", "compact", "marker", "table", "inline-table",
+    "table-row-group", "table-header-group", "table-footer-group", "table-row",
+    "table-column-group", "table-column", "table-cell", "table-caption", "none"
+  ];
+  var FONT_WEIGHTS = ["normal", "bold", "bolder", "lighter", "100", "200", "300", "400", "500",
+                      "600", "700", "800", "900", "inherit"];
+
+  // attribute id -> [name, value type, enum values]; types are read by readSvgbValue.
+  // Attributes without a type are known by name only: their encoding is not
+  // known yet, so a file that uses one cannot be decoded past it.
+  var SVGB_ATTRS = {
+    0: ["fill", "paint"], 1: ["stroke", "color"], 2: ["stroke-width", "num"],
+    3: ["visibility", "enum32", ["visible", "hidden"]],
+    4: ["font-family", "str"], 5: ["font-size", "num"],
+    6: ["font-style", "enum32", ["normal", "italic", "oblique", "inherit"]],
+    7: ["font-weight", "enum32", FONT_WEIGHTS], 8: ["stroke-dasharray", "nums"],
+    9: ["display", "enum32", DISPLAY], 10: ["fill-rule", "str"], 11: ["stroke-linecap", "str"],
+    12: ["stroke-linejoin", "str"], 13: ["stroke-dashoffset", "num"],
+    14: ["stroke-miterlimit", "num"], 15: ["color", "color"],
+    16: ["text-anchor", "enum32", ["start", "middle", "end"]],
+    17: ["text-decoration", "enum32", ["none", "underline", "overline", "line-through"]],
+    18: ["color-interpolation"], 19: ["color-rendering"], 20: ["letter-spacing"],
+    21: ["word-spacing"], 22: ["fill-opacity", "num"], 23: ["stroke-opacity", "num"],
+    24: ["opacity", "num"], 25: ["textLength", "num"], 26: ["width", "size"], 27: ["height", "size"],
+    28: ["r", "num"], 29: ["rx", "num"], 30: ["ry", "num"], 31: ["horiz-adv-x", "num"],
+    32: ["horiz-origin-x", "num"], 33: ["horiz-origin-y", "num"], 34: ["ascent", "num"],
+    35: ["descent", "num"], 36: ["alphabetic", "num"], 37: ["underline-position", "num"],
+    38: ["underline-thickness", "num"], 39: ["overline-position", "num"],
+    40: ["overline-thickness", "num"], 41: ["strikethrough-position", "num"],
+    42: ["strikethrough-thickness", "num"], 43: ["units-per-em", "num"], 44: ["word-spacing"],
+    45: ["letter-spacing"], 46: ["cx", "num"], 47: ["cy", "num"], 48: ["y", "coord"],
+    49: ["x", "coord"], 50: ["y1", "num"], 51: ["y2", "num"], 52: ["x1", "num"],
+    53: ["x2", "num"], 54: ["k", "num"], 55: ["g1", "str"], 56: ["g2", "str"], 57: ["u1", "str"],
+    58: ["u2", "str"], 59: ["unicode", "str"], 60: ["glyph-name", "str"], 61: ["lang"], 62: ["text-decoration"],
+    64: ["rotate", "floats"], 65: ["cdata"], 66: ["transform", "transform"], 67: ["style"],
+    71: ["from", "animvalue"], 72: ["to", "animvalue"], 73: ["by", "animvalue"],
+    74: ["attributeName", "attrname"], 75: ["pathLength"],
+    76: ["version", "num"], 77: ["stroke-width"], 78: ["points", "points"], 79: ["d", "path"],
+    80: ["type"], 81: ["stop-color", "color"], 82: ["fx", "num"], 83: ["fy", "num"],
+    84: ["offset", "num"], 85: ["spreadMethod", "enum8", ["pad", "reflect", "repeat"]],
+    86: ["gradientUnits", "enum8", ["userSpaceOnUse", "objectBoundingBox"]],
+    87: ["stop-opacity", "num"], 88: ["viewBox", "nums4"], 89: ["baseProfile", "str"],
+    90: ["zoomAndPan", "enum8", ["disable", "magnify"]], 91: ["preserveAspectRatio", "str"], 92: ["id", "str"], 93: ["xml:base", "str"],
+    94: ["xml:lang", "str"], 95: ["xml:space", "str"], 96: ["requiredExtensions", "strs", " "],
+    97: ["requiredFeatures", "strs", " "], 98: ["systemLanguage", "strs", ","], 101: ["media"], 102: ["title"],
+    103: ["xlink:actuate", "str"], 104: ["xlink:arcrole"], 105: ["xlink:role"],
+    106: ["xlink:show", "str"], 107: ["xlink:title", "str"], 108: ["xlink:type", "str"],
+    109: ["xlink:href", "href"], 110: ["begin"], 111: ["dur", "dur"], 112: ["repeatCount"],
+    113: ["repeatDur", "ms"], 114: ["end"],
+    115: ["restart", "enum8", ["always", "whenNotActive", "never"]],
+    116: ["accumulate", "flag", "sum"], 117: ["additive", "flag", "sum"],
+    118: ["keySplines"], 119: ["keyTimes"],
+    120: ["calcMode", "enum8", ["discrete", "linear", "paced", "spline"]], 121: ["path"],
+    123: ["gradientTransform", "matrix"], 133: ["volume"], 134: ["audio-level"],
+    135: ["fill", "flag", "freeze"],  // fill on animation elements
+    136: ["xlink:href", "data"], 163: ["values"]
+  };
+
+  // Value types of animation values (from, to, by), as written after
+  // attributeName and before each value. The encoder knows more
+  // (0 7 0xd 0xf 0x35 0x49 0x61 0x62 99), but their layout is not known yet.
+  var SVGB_ANIM_TYPES = {2: "color", 3: "num", 0x45: ["enum32", ["visible", "hidden"]]};
+
+  // Path segment types -> [SVG command, coordinate count].
+  var SVGB_SEGMENTS = [["M", 2], ["L", 2], ["Q", 4], ["C", 6], ["Z", 0]];
+
+  function escapeXml(s, attr) {
+    // Characters XML 1.0 does not allow become U+FFFD.
+    s = s.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]|[\ud800-\udbff](?![\udc00-\udfff])|(^|[^\ud800-\udbff])[\udc00-\udfff]/g,
+                  function (m, before) { return (before || "") + "�"; });
+    s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return attr ? s.replace(/"/g, "&quot;") : s;
+  }
+
+  // Parsed SVGB file: the element tree with SVG attribute values.
+  function SvgbFile(data, log) {
+    this.r = new Reader(data);
+    this.log = log || function () {};
+    this.warnings = [];
+    this.pos = 0;
+    this.parseHeader();
+    this.parseElements();
+  }
+
+  SvgbFile.prototype.warn = NvgFile.prototype.warn;
+
+  SvgbFile.prototype.parseHeader = function () {
+    var magic = this.r.u32(0);
+    if (!SVGB_MAGIC.hasOwnProperty(magic)) {
+      throw new NvgError("not an SVGB file (unknown magic 0x" + hex(magic) + ")");
+    }
+    this.format = SVGB_MAGIC[magic];
+    this.fixed = this.format === 1 || this.format === 2;
+    this.bgr = this.format < 2;  // formats 0 and 1 store colors as 0x00BBGGRR
+    this.pos = 4;
+    this.log("header: SVGB format " + this.format + " (" +
+             (this.fixed ? "16.16 fixed point" : "float") + " numbers)");
+  };
+
+  SvgbFile.prototype.u8 = function () { return this.r.u8(this.pos++); };
+  SvgbFile.prototype.u16 = function () { var v = this.r.u16(this.pos); this.pos += 2; return v; };
+  SvgbFile.prototype.u32 = function () { var v = this.r.u32(this.pos); this.pos += 4; return v; };
+  SvgbFile.prototype.bytes = function (n) { var v = this.r.u8s(this.pos, n); this.pos += n; return v; };
+
+  SvgbFile.prototype.num = function () {
+    var v = this.fixed ? this.r.ints("s32", this.pos, 1)[0] / 65536 : this.r.f32s(this.pos, 1)[0];
+    this.pos += 4;
+    return v;
+  };
+
+  SvgbFile.prototype.nums = function (n) {
+    var out = [];
+    for (var i = 0; i < n; i++) out.push(this.num());
+    return out;
+  };
+
+  // u8 byte length, then UTF-16LE text
+  SvgbFile.prototype.str = function () {
+    var n = this.u8(), units = [];
+    var b = this.bytes(n);
+    for (var i = 0; i + 1 < n; i += 2) units.push(b[i] | b[i + 1] << 8);
+    if (n % 2) this.warn("odd string length " + n + " at 0x" + hex(this.pos - n - 1));
+    var s = "";
+    for (var j = 0; j < units.length; j += 4096) {
+      s += String.fromCharCode.apply(null, units.slice(j, j + 4096));
+    }
+    return s;
+  };
+
+  SvgbFile.prototype.color = function () {
+    var v = this.u32();
+    if (v === 0x01ffffff) return "none";
+    if (v === 0x02ffffff) return "currentColor";
+    if (v >>> 24) this.warn("color 0x" + hex(v) + " has unknown flags, using its RGB value");
+    if (this.bgr) v = (v & 0xff) << 16 | v & 0xff00 | (v >> 16) & 0xff;
+    return "#" + ("00000" + (v & 0xffffff).toString(16)).slice(-6);
+  };
+
+  SvgbFile.prototype.readValue = function (id, def, element) {
+    var type = def[1], i, v;
+    switch (type) {
+      case "num":
+        v = this.num();
+        if (id === 25 && v === 0) {  // the encoder writes textLength as 0
+          this.log("  textLength 0 dropped");
+          return null;
+        }
+        return fmt(v);
+      case "nums":  // u8 count, then numbers
+        return this.nums(this.u8()).map(fmt).join(" ");
+      case "nums4":
+        return this.nums(4).map(fmt).join(" ");
+      case "coord":  // on <text>, x and y are lists: u8 count, numbers
+        if (element === "text") return this.nums(this.u8()).map(fmt).join(" ");
+        return fmt(this.num());
+      case "floats":  // u8 count, then f32 values even in fixed-point files
+        var f = this.r.f32s(this.pos + 1, this.u8());
+        this.pos += 4 * f.length;
+        return f.map(fmt).join(" ");
+      case "size":  // the root <svg> has a percentage flag before the number
+        var percent = element === "svg" ? this.u8() : 0;
+        return fmt(this.num()) + (percent ? "%" : "");
+      case "str":
+        return this.str();
+      case "strs":  // u8 count, then strings
+        var list = [];
+        for (i = this.u8(); i > 0; i--) list.push(this.str());
+        return list.join(def[2]);
+      case "color":
+        return this.color();
+      case "paint":  // u8 flag: 0 color, 1 id of a paint server
+        var flag = this.u8();
+        if (flag === 0) return this.color();
+        if (flag === 1) return "url(#" + this.str() + ")";
+        throw new NvgError("unknown paint flag " + flag + " at 0x" + hex(this.pos - 1));
+      case "enum8":
+      case "enum32":
+        v = type === "enum8" ? this.u8() : this.u32();
+        if (v < def[2].length) return def[2][v];
+        this.warn("unknown value " + v + " for " + def[0] + ", attribute dropped");
+        return null;
+      case "transform":  // a c e b d f, then u32 transform type
+      case "matrix":
+        var m = this.nums(6);
+        if (type === "transform") this.u32();
+        return "matrix(" + [m[0], m[3], m[1], m[4], m[2], m[5]].map(fmt).join(" ") + ")";
+      case "path":
+      case "points":
+        return this.readPath(type === "points");
+      case "href":  // string; a local reference (#id) is followed by the id again
+        var href = this.str();
+        if (href.charAt(0) === "#") this.log("  xlink:href target id " + JSON.stringify(this.str()));
+        if (href === "") this.log("  empty xlink:href dropped");
+        return href === "" ? null : href;
+      case "flag":  // no value: the attribute's presence means def[2]
+        return def[2];
+      case "ms":  // u32 milliseconds
+        return fmt(this.u32() / 1000) + "s";
+      case "dur":  // u32 milliseconds, then a u8 that has been 0 in every sample
+        v = fmt(this.u32() / 1000) + "s";
+        i = this.u8();
+        if (i) this.log("  dur flag byte " + i);
+        return v;
+      case "attrname":  // u16 attribute id; except on animateTransform, then a u8 value type
+        i = this.u16();
+        var target = SVGB_ATTRS[i];
+        if (!target) throw new NvgError("attributeName refers to unknown attribute " + i);
+        if (element !== "animateTransform") this.log("  value type " + this.u8());
+        return target[0];
+      case "animvalue":  // u8 value type, then the value
+        i = this.u8();
+        var vt = SVGB_ANIM_TYPES[i];
+        if (!vt) {
+          throw new NvgError("unknown animation value type " + i + " at 0x" + hex(this.pos - 1) +
+                             ": its encoding is not known yet");
+        }
+        return this.readValue(id, typeof vt === "string" ? [def[0], vt] : [def[0]].concat(vt), element);
+      case "data":  // u32 byte length, then 8-bit text (data: URIs of images)
+        var n = this.u32();
+        var b = this.bytes(n), s = "";
+        for (i = 0; i < n; i += 4096) s += String.fromCharCode.apply(null, b.slice(i, i + 4096));
+        return s;
+    }
+    throw new NvgError("cannot decode SVGB attribute " + id + " (" + def[0] + ") at 0x" +
+                       hex(this.pos - 2) + ": its encoding is not known yet");
+  };
+
+  // u16 segment count, segment types (u8 each), u16 coordinate count, numbers
+  SvgbFile.prototype.readPath = function (points) {
+    var start = this.pos;
+    var segs = this.bytes(this.u16());
+    var coords = this.nums(this.u16());
+    if (points) {
+      if (coords.length % 2) this.warn("odd number of point coordinates at 0x" + hex(start));
+      var pts = [];
+      for (var k = 0; k + 1 < coords.length; k += 2) pts.push(fmt(coords[k]) + "," + fmt(coords[k + 1]));
+      return pts.join(" ");
+    }
+    var parts = [], c = 0;
+    for (var i = 0; i < segs.length; i++) {
+      var seg = SVGB_SEGMENTS[segs[i]];
+      if (!seg) throw new NvgError("unknown path segment type " + segs[i] + " at 0x" + hex(start));
+      if (c + seg[1] > coords.length) {
+        throw new NvgError("path at 0x" + hex(start) + " has too few coordinates");
+      }
+      parts.push(seg[0] + coords.slice(c, c + seg[1]).map(fmt).join(" "));
+      c += seg[1];
+    }
+    if (c < coords.length) this.warn("path at 0x" + hex(start) + " has " + (coords.length - c) +
+                                     " unused coordinates");
+    return parts.join(" ");
+  };
+
+  // Element tree: {name, attrs: [[name, value]], children: [element or {text}]}
+  SvgbFile.prototype.parseElements = function () {
+    var stack = [], roots = [];
+    for (;;) {
+      var at = this.pos, code = this.u8();
+      if (code === SVGB_END) break;
+      if (code === SVGB_END_ELEMENT) {
+        if (!stack.length) throw new NvgError("element end without element at 0x" + hex(at));
+        stack.pop();
+        continue;
+      }
+      if (code === SVGB_TEXT) {
+        if (!stack.length) throw new NvgError("text outside of any element at 0x" + hex(at));
+        var text = this.str();
+        this.log("0x" + hex(at) + " text " + JSON.stringify(text));
+        stack[stack.length - 1].children.push({text: text});
+        continue;
+      }
+      var name = SVGB_ELEMENTS[code];
+      if (!name) throw new NvgError("unknown SVGB element " + code + " at 0x" + hex(at));
+      if (!stack.length && roots.length) {
+        throw new NvgError("second root element <" + name + "> at 0x" + hex(at));
+      }
+      this.log("0x" + hex(at) + " <" + name + ">");
+      var el = {name: name, attrs: [], children: []};
+      for (;;) {
+        var apos = this.pos, id = this.u16();
+        if (id === SVGB_END_ATTRS) break;
+        var def = SVGB_ATTRS[id];
+        if (!def) throw new NvgError("unknown SVGB attribute " + id + " at 0x" + hex(apos));
+        var value = this.readValue(id, def, name);
+        this.log("0x" + hex(apos) + "   " + def[0] + " (" + id + ") = " +
+                 JSON.stringify(value !== null && value.length > 80 ? value.slice(0, 80) + "..." : value));
+        if (value === null) continue;
+        var dup = el.attrs.filter(function (a) { return a[0] === def[0]; })[0];
+        if (dup) {
+          this.warn("<" + name + "> at 0x" + hex(at) + " sets " + def[0] + " twice, keeping the last value");
+          dup[1] = value;
+        } else {
+          el.attrs.push([def[0], value]);
+        }
+      }
+      (stack.length ? stack[stack.length - 1].children : roots).push(el);
+      // An element without children is ended right after its attributes.
+      if (this.r.u8(this.pos) === SVGB_END_ELEMENT) this.pos++;
+      else stack.push(el);
+    }
+    if (stack.length) this.warn(stack.length + " element(s) not closed at end of file");
+    if (this.pos < this.r.data.length) {
+      this.warn((this.r.data.length - this.pos) + " bytes of trailing data ignored");
+    }
+    if (!roots.length) throw new NvgError("SVGB file contains no elements");
+    this.root = roots[0];
+    if (this.root.name !== "svg") this.warn("root element is <" + this.root.name + ">, not <svg>");
+  };
+
+  function renderSvgb(svgb, sourceName) {
+    var out = prologue(sourceName);
+    var root = svgb.root, xlink = false;
+    (function scan(el) {
+      el.attrs.forEach(function (a) { if (a[0].lastIndexOf("xlink:", 0) === 0) xlink = true; });
+      el.children.forEach(function (c) { if (c.name) scan(c); });
+    })(root);
+    var ns = [["xmlns", "http://www.w3.org/2000/svg"]];
+    if (xlink) ns.push(["xmlns:xlink", "http://www.w3.org/1999/xlink"]);
+
+    function open(el, extra) {
+      return "<" + el.name + extra.concat(el.attrs).map(function (a) {
+        return " " + a[0] + '="' + escapeXml(a[1], true) + '"';
+      }).join("");
+    }
+    function inline(el) {  // elements that only hold text stay on one line
+      return el.children.map(function (c) {
+        return c.name ? open(c, []) + (c.children.length ? ">" + inline(c) + "</" + c.name + ">" : "/>")
+                      : escapeXml(c.text, false);
+      }).join("");
+    }
+    (function write(el, indent, extra) {
+      if (!el.children.length) {
+        out.push(indent + open(el, extra) + "/>");
+      } else if (el.children.some(function (c) { return !c.name; })) {
+        out.push(indent + open(el, extra) + ">" + inline(el) + "</" + el.name + ">");
+      } else {
+        out.push(indent + open(el, extra) + ">");
+        el.children.forEach(function (c) { write(c, indent + "  ", []); });
+        out.push(indent + "</" + el.name + ">");
+      }
+    })(root, "", ns);
+    return out.join("\n") + "\n";
+  }
+
+  // Decode NVG or SVGB bytes (Uint8Array) and return {svg, warnings}.
   function decode(data, sourceName, log) {
-    var nvg = new NvgFile(data, log);
-    var svg = new SvgBuilder(nvg, sourceName).run();
-    return {svg: svg, warnings: nvg.warnings};
+    if (data.length >= 3 && data[0] === 0x6e && data[1] === 0x76 && data[2] === 0x67) {
+      var nvg = new NvgFile(data, log);
+      var svg = new SvgBuilder(nvg, sourceName).run();
+      return {svg: svg, warnings: nvg.warnings};
+    }
+    if (data.length >= 4 && SVGB_MAGIC.hasOwnProperty(new Reader(data).u32(0))) {
+      var svgb = new SvgbFile(data, log);
+      return {svg: renderSvgb(svgb, sourceName), warnings: svgb.warnings};
+    }
+    throw new NvgError("not an NVG or SVGB file (unknown signature)");
   }
 
   var api = {decode: decode, NvgError: NvgError, VERSION: VERSION, fmt: fmt};

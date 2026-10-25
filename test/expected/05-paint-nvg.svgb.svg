@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Decoded from 05-paint-nvg.svgb by nvg2svg 1.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200" color="#336699">
+  <line x1="10" y1="10" x2="190" y2="10" stroke="#000000" stroke-dasharray="5"/>
+  <line x1="10" y1="20" x2="190" y2="20" stroke="#000000" stroke-dasharray="5 2 1" stroke-dashoffset="3"/>
+  <polyline points="10,40 50,80 90,40" fill="none" stroke="#000000" stroke-width="4" stroke-linejoin="miter" stroke-miterlimit="8" stroke-linecap="square"/>
+  <path d="M100 40 L180 40 L140 100 Z M120 50 L160 50 L140 80 Z" fill-rule="evenodd" fill="#336699"/>
+  <rect x="10" y="110" width="20" height="20" visibility="hidden"/>
+  <rect x="40" y="110" width="20" height="20" display="none"/>
+  <rect x="70" y="110" width="20" height="20" display="inline" stroke="#336699"/>
+  <rect x="100" y="110" width="20" height="20" fill="#00ff00" fill-opacity="0.25"/>
+  <rect x="130" y="110" width="20" height="20" fill="none" stroke="#0000ff" stroke-opacity="0.75"/>
+  <rect x="160" y="110" width="20" height="20" fill="#ff00ff" opacity="0.5"/>
+  <rect x="10" y="140" width="20" height="20" fill="none" stroke="none"/>
+</svg>

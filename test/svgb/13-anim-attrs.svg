@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <rect x="0" y="0" width="10" height="10" stroke="black">
+    <animate attributeName="stroke-width" from="1" to="5" dur="1s"/>
+    <animate attributeName="opacity" from="1" to="0" dur="1s"/>
+    <animate attributeName="fill-opacity" from="1" to="0" dur="1s"/>
+    <animate attributeName="fill" from="#ff0000" to="#0000ff" dur="1s"/>
+    <set attributeName="display" to="none" begin="1s"/>
+    <set attributeName="fill" to="none" begin="1s"/>
+    <animate attributeName="stroke-dasharray" from="1 2" to="5 6" dur="1s"/>
+    <set attributeName="stroke-linecap" to="round" begin="1s"/>
+    <set attributeName="fill-rule" to="evenodd" begin="1s"/>
+  </rect>
+  <path d="M0 0 L10 0 L10 10 Z">
+    <animate attributeName="d" from="M0 0 L10 0 L10 10 Z" to="M0 0 L20 0 L20 20 Z" dur="1s"/>
+  </path>
+  <polygon points="0,0 10,0 10,10">
+    <animate attributeName="points" from="0,0 10,0 10,10" to="0,0 20,0 20,20" dur="1s"/>
+  </polygon>
+  <text x="10" y="50" font-size="10">Hi
+    <animate attributeName="font-size" from="10" to="20" dur="1s"/>
+  </text>
+  <g>
+    <set attributeName="visibility" to="hidden" begin="1s"/>
+  </g>
+</svg>

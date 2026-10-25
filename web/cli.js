@@ -17,17 +17,16 @@ const USAGE = "usage: nvg2svg [-h] [-o FILE | -d DIR] [-v] [--version] INPUT [IN
 
 const HELP = USAGE + `
 
-Decode Nokia NVG vector graphics files (Symbian^3, svgtbinencode -v 5) back
-to SVG.
+Decode Nokia NVG and SVGB vector graphics files (Symbian) back to SVG.
 
 positional arguments:
-  INPUT                NVG file(s) or directories containing .nvg/.svgb files
+  INPUT                NVG/SVGB file(s) or directories containing .nvg/.svgb files
 
 options:
   -h, --help           show this help message and exit
   -o, --output FILE    output SVG file ('-' for stdout); single input only
   -d, --outdir DIR     directory to write the SVG files into
-  -v, --verbose        print the decoded NVG structure to stderr
+  -v, --verbose        print the decoded file structure to stderr
   --version            show program's version number and exit
 `;
 

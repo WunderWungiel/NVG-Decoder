@@ -16,3 +16,6 @@ desktop.ini
 
 # Docker
 .env
+
+# Local reference files for SVGB work
+/decoded/

@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /* Regression and fuzz test for web/nvg2svg.js.
  *
- *   node web/check.js examples              compare with the outputs in test/expected/
+ *   node web/check.js examples test/svgb    compare with the outputs in test/expected/
  *   node web/check.js examples --fuzz 5000  also decode 5000 mutated copies
  *   node web/check.js examples --update     rewrite test/expected/ from the current decoder
  *
- * For an input "x.nvg", test/expected/ holds "x.nvg.svg" (decoded) or
- * "x.nvg.error" (rejected), plus "x.nvg.warnings" if there were any. The SVG
- * text, the warnings and the error message must match exactly. Fuzzed inputs
+ * Directories contribute their .nvg and .svgb files. For an input "x.nvg",
+ * test/expected/ holds "x.nvg.svg" (decoded) or "x.nvg.error" (rejected),
+ * plus "x.nvg.warnings" if there were any. The SVG text, the warnings and the
+ * error message must match exactly. Fuzzed inputs
  * have no expected output; they only have to decode or be rejected with an
  * NvgError, never crash.
  */
@@ -69,7 +70,7 @@ function collect(inputs) {
     if (fs.statSync(p).isDirectory()) {
       for (const f of fs.readdirSync(p).sort()) {
         const fp = path.join(p, f);
-        if (fs.statSync(fp).isFile()) files.push(fp);
+        if (/\.(nvg|svgb)$/i.test(f) && fs.statSync(fp).isFile()) files.push(fp);
       }
     } else {
       files.push(p);

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Decoded from 10-font.svgb by nvg2svg 1.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="100" height="100" viewBox="0 0 100 100">
+  <defs>
+    <font id="f" horiz-adv-x="500">
+      <font-face font-family="Test" units-per-em="1000" ascent="800" descent="200" alphabetic="0" underline-position="-100" underline-thickness="50"/>
+      <missing-glyph horiz-adv-x="500" d="M0 0 L500 0 L500 700 Z"/>
+      <glyph unicode="A" glyph-name="A" horiz-adv-x="600" d="M0 0 L300 700 L600 0 Z"/>
+      <glyph unicode="B" d="M0 0 L0 700 L500 350 Z"/>
+      <hkern u1="A" u2="B" k="50"/>
+    </font>
+  </defs>
+  <text x="10" y="50" font-family="Test" font-size="20">AB</text>
+</svg>

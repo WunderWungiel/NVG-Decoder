@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <defs>
+    <circle id="dot" cx="0" cy="0" r="5" fill="red"/>
+  </defs>
+  <use xlink:href="#dot" x="20" y="20"/>
+  <use xlink:href="#dot" x="40" y="20" width="10" height="10"/>
+  <a xlink:href="http://example.com/" xlink:title="Example" xlink:show="new">
+    <rect x="10" y="50" width="30" height="30" fill="blue"/>
+  </a>
+  <image x="60" y="50" width="40" height="40" xlink:href="picture.png" preserveAspectRatio="xMidYMid slice"/>
+  <image x="110" y="50" width="40" height="40" xlink:href="picture.jpg" preserveAspectRatio="none"/>
+</svg>

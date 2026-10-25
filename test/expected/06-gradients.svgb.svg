@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Decoded from 06-gradients.svgb by nvg2svg 1.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="lin" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox" spreadMethod="reflect">
+      <stop offset="0" stop-color="#ff0000"/>
+      <stop offset="0.5" stop-color="#00ff00" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#0000ff"/>
+    </linearGradient>
+    <linearGradient id="lin2" x1="10" y1="0" x2="190" y2="0" gradientUnits="userSpaceOnUse" spreadMethod="repeat" gradientTransform="matrix(0.866 0.5 -0.5 0.866 0 0)"/>
+    <radialGradient id="rad" cx="100" cy="150" r="40" fx="90" fy="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#000000"/>
+    </radialGradient>
+  </defs>
+  <rect x="10" y="10" width="180" height="40" fill="url(#lin)"/>
+  <rect x="10" y="60" width="180" height="40" fill="url(#lin2)" stroke="#000000" stroke-width="3"/>
+  <circle cx="100" cy="150" r="40" fill="url(#rad)"/>
+</svg>

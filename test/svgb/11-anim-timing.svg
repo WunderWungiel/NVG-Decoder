@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200" viewBox="0 0 200 200">
+  <rect id="r1" x="0" y="0" width="10" height="10">
+    <animate attributeName="x" from="0" to="100" dur="1s"/>
+    <animate attributeName="x" from="0" to="100" begin="2.5s" dur="0.5s"/>
+    <animate attributeName="x" from="0" to="100" begin="indefinite" dur="1s"/>
+    <animate attributeName="x" from="0" to="100" begin="r1.click" dur="1s"/>
+    <animate attributeName="x" from="0" to="100" begin="r1.end+1s" dur="1s"/>
+    <animate attributeName="x" from="0" to="100" begin="0s;3s" dur="1s"/>
+    <animate attributeName="x" from="0" to="100" begin="1s" end="4s" dur="1s"/>
+    <animate attributeName="x" from="0" to="100" end="r1.click" dur="1s"/>
+    <animate attributeName="x" from="0" to="100" dur="indefinite"/>
+    <animate attributeName="x" from="0" to="100" dur="2s" repeatCount="3"/>
+    <animate attributeName="x" from="0" to="100" dur="2s" repeatCount="2.5"/>
+    <animate attributeName="x" from="0" to="100" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="x" from="0" to="100" dur="2s" repeatDur="indefinite"/>
+    <animate attributeName="x" from="0" to="100" dur="2s" fill="remove" restart="never"/>
+    <animate attributeName="x" from="0" to="100" dur="2s" restart="always" additive="replace" accumulate="none"/>
+  </rect>
+</svg>
